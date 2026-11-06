@@ -31,7 +31,7 @@ Laptop: server (HTTP API + SQLite) -> web dashboard
 - Telemetry about once a second, plus an immediate event when a fall is detected.
 - Server timestamps messages on receipt (the ESP32 has no real-time clock).
 - Same server can move to a Raspberry Pi later.
-- Message formats are in `CLAUDE.md` and move to `docs/PROTOCOL.md`.
+- Message formats: `docs/PROTOCOL.md` (single source of truth).
 
 ## 4. Acceptance criteria (how we know it works)
 
@@ -40,7 +40,7 @@ Laptop: server (HTTP API + SQLite) -> web dashboard
 - [ ] A3. Normal activity does not trigger false alarms across a set of trials: walking, sitting, nodding, looking down, climbing steps, and setting the helmet down gently. Record the number of trials and results.
 - [ ] A4. Heat color and heat index on the dashboard change when the sensor is exposed to warmer air.
 - [ ] A5. The dashboard shows named devices, an incident list that persists after a refresh, and a location (zone) per device.
-- [ ] A6. The helmet being taken off or set down does not raise a fall alert (worn detection).
+- [ ] A6. The helmet being taken off or set down does not raise a fall alert (worn detection). If the worn sensor is cut, A6 becomes a stretch test and the firmware sends `worn: true` always; say so in the pitch.
 - [ ] A7 (stretch). Confirmed incidents appear as hazard markers or shaded zones on the map. Dismissed incidents do not.
 
 ## 5. Workstreams and tasks
@@ -53,14 +53,16 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
 - [ ] Power the ESP32 from the NULLLAB module's 5 V header pin to VIN (or its USB-A to the ESP32's micro-USB). Never the raw battery pin into VIN, and never laptop USB and the module together. Keep a power bank as a fallback.
 - [ ] Solder or secure final connections; heat-shrink; add a switch.
 - [ ] Housing (a teammate is designing it; share the dimensions in `CLAUDE.md`): design and 3D-print the housing and a clip for the hat (no drilling): separate LiPo compartment, vent for the BME280, GPS antenna facing up, USB/charge port access, space for LEDs later. Print in PETG or ABS and test-fit before the final print.
-- [ ] Add a worn/not-worn sensor (IR proximity or microswitch) if time allows.
+- [ ] Add a worn/not-worn sensor (IR proximity or microswitch) if time allows. If it is cut, set `HAS_WORN_SENSOR 0` in `firmware/config.h`.
+- [ ] Measure battery runtime with Wi-Fi and GPS on (needed for A1: 10+ minutes). Record the result in section 8.
 - [ ] Wiring notes in `docs/WIRING.md`.
 
 ### W2. Firmware (Owner: TBD)
 - [ ] Read BNO085 (accel, orientation) and BME280 over I2C; print to serial.
 - [ ] Read the GPS with TinyGPSPlus; report `gps_fix`, and `lat`/`lon` only when there is a fix.
 - [ ] Compute heat index from temperature and humidity.
-- [ ] Fall state machine with thresholds in `firmware/config.h`.
+- [ ] Fall state machine with thresholds in `firmware/config.h`. Add a `HAS_WORN_SENSOR` flag; when it is 0, send `worn: true`.
+- [ ] Send `zone: null` in telemetry and events (the server fills in the zone).
 - [ ] Wi-Fi client: POST telemetry (1 Hz) and fall events immediately.
 - [ ] Reconnect logic; fall events queued if Wi-Fi drops.
 
@@ -73,8 +75,10 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
 - [ ] Stretch: plan staged falls in two or three zones for the demo so the hazard map shows real data.
 
 ### W4. Server and dashboard (Owner: TBD)
-- [ ] Pick the stack (Python FastAPI or Node) and record it in section 8.
-- [ ] API: `POST /api/telemetry`, `POST /api/event`, `GET /api/devices`, `GET /api/incidents`, `PATCH /api/devices/{id}` (assign names).
+- [x] Pick the stack: Python FastAPI + SQLite (see section 8).
+- [ ] API: `POST /api/telemetry`, `POST /api/event`, `GET /api/devices`, `GET /api/incidents`, `PATCH /api/devices/{id}` (assign `name` and `zone`).
+- [ ] Server stamps each telemetry message and event with the device's assigned zone, and copies the device's current name into `worker_name` when it creates an incident.
+- [ ] Dashboard: a zone picker per device, labeled "simulated location".
 - [ ] SQLite storage for devices, telemetry, and incidents.
 - [ ] Dashboard: device list with names and status, incident list, zone map on a floor-plan image, heat color per worker.
 - [ ] Optional: simulator script that posts fake devices so the dashboard can be built before hardware is ready.
@@ -120,7 +124,16 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 | | MCU: ESP32 (ESP-32S WROOM-32) | team |
 | | IMU: GY-BNO085 | team |
 | | MVP is helmet-only, indoor demo with Wi-Fi | team |
-| | Server stack: TBD | |
+| | Barometer/temp/humidity: BME280 | team |
+| | Battery: NULLLAB 1200 mAh LiPo module, 5 V header to ESP32 VIN | team |
+| | GPS: GY-NEO6MV2 (NEO-6M), mounted; indoor demo uses zones | team |
+| | Enclosure: 3D-printed housing and hat clip, no drilling | team |
+| 2026-11-06 | Server stack: Python FastAPI + SQLite | team |
+| 2026-11-06 | Indoor zone is set per device on the dashboard; server stamps it on telemetry and events; firmware sends `zone: null`; UI labels it simulated | team |
+| 2026-11-06 | Incidents store a snapshot of the worker's name at creation time | team |
+| 2026-11-06 | Worn sensor: attempt it; if cut, firmware sends `worn: true` (`HAS_WORN_SENSOR 0`) and A6 becomes a stretch test | team |
+| 2026-11-06 | `docs/PROTOCOL.md` written: all routes, field types, retry/dedupe for fall events, heat-level bands, `hazard_report` incident type | team |
+| | Battery runtime with Wi-Fi + GPS on: TBD (measure) | |
 | | Threshold values after tuning: TBD | |
 
 ## 9. Risks and mitigations
@@ -143,11 +156,8 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 
 - Hackathon dates, judging format, and demo room setup (indoor, Wi-Fi, power outlets)?
 - Who owns each workstream?
-- Confirm the zone-based location approach for the indoor demo.
 - Which 3D printer and filament for the housing?
 - Which helmet will we use, and is there room for the housing and clip? Measure the actual battery runtime with Wi-Fi and GPS on, since no figure is guaranteed.
-- Server stack: Python or Node?
-- How does the demo assign a location (zone) at the moment of a fall: a manual zone per device, a simulated path, or something else?
 - What does "navigation lights" need to do, if we get to it? (Direction to a fallen worker needs position and heading, which are hard indoors.)
 
 ## 11. Demo script **[proposed]**

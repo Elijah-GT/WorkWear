@@ -27,14 +27,18 @@ Framing for outsiders: we are student researchers exploring whether wearable fal
 - Heart rate and the Raspberry Pi networking are **later**, only if there is time.
 - Navigation lights (LEDs on the helmet that point toward a fallen worker) are **later**.
 - The hazard-zone map (red markers where falls or injuries happened) is a **stretch goal**, built only after the basic incident list works.
+- Server: **Python FastAPI + SQLite** (built-in `sqlite3`). Decided 2026-11-06.
+- Indoor zone: **set per device on the dashboard** by the supervisor. The server stamps that zone on each telemetry message and event it receives. Firmware does not know its zone. The UI labels the zone as simulated. Decided 2026-11-06.
+- Worker names: incidents store a **snapshot** of the device's name at the time the incident is created, so history stays correct if a helmet is reassigned. Decided 2026-11-06.
+- Worn sensor: **attempt it, with a fallback**. If the sensor is cut or not working, firmware always sends `worn: true` (config flag `HAS_WORN_SENSOR 0`), and acceptance test A6 becomes a stretch test. Say so in the pitch. Decided 2026-11-06.
 
 ## Proposed defaults (change only if the team agrees; note it in PLAN.md)
 
 - The BME280 gives a heat index, and pressure lets us see altitude drops.
-- Location for the indoor demo: **zone-based or simulated**, because GPS will not get a fix indoors. The GPS module still runs: firmware reads it, reports `gps_fix` (true or false), and fills `lat`/`lon` only when there is a fix. Outdoors, or near a window, a real fix replaces the zone.
+- Location for the indoor demo: **zone set on the dashboard** (see decisions above), because GPS will not get a fix indoors. The GPS module still runs: firmware reads it, reports `gps_fix` (true or false), and fills `lat`/`lon` only when there is a fix. Outdoors, or near a window, a real fix replaces the zone.
 - Data path: ESP32 sends JSON over Wi-Fi (HTTP POST) to a server on a laptop. Moving that same server to a Raspberry Pi later should need no rewrite.
 - Fall detection runs **on the ESP32**, not on the laptop, so alerts survive a dropped connection.
-- A worn/not-worn sensor (IR proximity or microswitch inside the crown) so a helmet set down or tossed is not read as a fall.
+- A worn/not-worn sensor (IR proximity or microswitch inside the crown) so a helmet set down or tossed is not read as a fall. Fallback if it is cut: see decisions above.
 
 ## Architecture
 
@@ -55,28 +59,28 @@ CLAUDE.md
 PLAN.md
 ```
 
-## Data contract (single source of truth: `docs/PROTOCOL.md` once created)
+## Data contract (summary; the full spec is `docs/PROTOCOL.md`, which wins if they disagree)
 
 Telemetry, about 1 Hz, `POST /api/telemetry`:
 
 ```json
 {"device_id":"helmet-01","uptime_ms":123456,"worn":true,"temp_c":29.4,
  "humidity_pct":41.0,"pressure_hpa":1009.2,"heat_index_c":30.1,
- "accel_g":1.01,"tilt_deg":12.0,"zone":"A2","gps_fix":false,"lat":null,"lon":null}
+ "accel_g":1.01,"tilt_deg":12.0,"zone":null,"gps_fix":false,"lat":null,"lon":null}
 ```
 
 Event, sent immediately, `POST /api/event`:
 
 ```json
 {"device_id":"helmet-01","uptime_ms":123999,"type":"fall",
- "peak_g":4.2,"freefall_ms":220,"still_s":2.1,"zone":"A2"}
+ "peak_g":4.2,"freefall_ms":220,"still_s":2.1,"zone":null}
 ```
 
-Rules: the ESP32 has no real-time clock, so the **server stamps time on receipt**. Never change a field name or type without updating `docs/PROTOCOL.md`, the firmware, the server, and the dashboard in the same change. The dashboard assigns human names to `device_id`s.
+Rules: the ESP32 has no real-time clock, so the **server stamps time on receipt**. Firmware sends `zone: null`; the server fills in the zone assigned to that device on the dashboard (`PATCH /api/devices/{id}` with `name` and `zone`). The field stays in the payload so a future firmware could report a zone itself. Never change a field name or type without updating `docs/PROTOCOL.md`, the firmware, the server, and the dashboard in the same change. The dashboard assigns human names to `device_id`s.
 
 ## Hazard map (stretch goal)
 
-Each incident the server stores has: `id`, `device_id`, `worker_name`, `type` (`fall` or `injury_report`), `ts` (server time), `zone`, optional `lat` and `lon`, `peak_g` (falls only), `status` (`new`, `confirmed`, `dismissed`), and `notes`.
+Each incident the server stores has: `id`, `device_id`, `worker_name` (copied from the device's name when the incident is created), `type` (`fall`, `injury_report`, or `hazard_report`), `ts` (server time), `zone`, optional `lat` and `lon`, `peak_g` (falls only), `status` (`new`, `confirmed`, `dismissed`), `notes`, `delayed` (a queued fall arrived late), and `sample` (seeded history, shown as sample data). Full spec: `docs/PROTOCOL.md`.
 
 - Falls come from the helmet. Injuries and other hazards (for example a wet floor) are **manual reports** entered on the dashboard, because the helmet cannot detect injuries.
 - Only `confirmed` incidents count toward a hazard zone. A supervisor confirms or dismisses each incident on the dashboard, so false alarms do not create hazards.
@@ -93,7 +97,7 @@ State machine: `IDLE -> FREEFALL -> IMPACT -> STILL -> ALERT`.
 - Impact: a spike above about 2.5 to 3 g shortly after free-fall.
 - Stillness: roughly 1 g with little rotation for about 2 s, ideally with the helmet tilted away from upright.
 - Cancel and log as "recovered" if normal movement resumes.
-- Suppress alerts when `worn` is false.
+- Suppress alerts when `worn` is false. Without a worn sensor (`HAS_WORN_SENSOR 0`), `worn` is always true and this check does nothing.
 - Keep all thresholds in one config header (`firmware/config.h`), never scattered in code.
 - The BNO085 accelerometer range is about +/-8 g (verify in the datasheet). Hard impacts will clip, which is fine for triggering but not for measuring severity.
 
@@ -123,7 +127,7 @@ State machine: `IDLE -> FREEFALL -> IMPACT -> STILL -> ALERT`.
 ## Conventions
 
 - Firmware: Arduino framework on ESP32 (Arduino IDE or PlatformIO). Libraries we expect: Adafruit BNO08x, Adafruit BME280, TinyGPSPlus, ArduinoJson, WiFi/HTTPClient.
-- Server: Python (FastAPI) or Node, with SQLite. Pick one in `PLAN.md` and stick to it.
+- Server: Python FastAPI with SQLite (decided 2026-11-06).
 - Dashboard: static HTML/JS served by the server. Use a floor-plan image with zones for the indoor demo. A Leaflet map is optional for later outdoor GPS.
 - Keep it simple. This is a 2-day build. Prefer working over elegant, and no new dependencies without a reason.
 - Small commits, clear messages. One workstream per branch if you use branches.

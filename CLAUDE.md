@@ -35,7 +35,7 @@ Framing for outsiders: we are student researchers exploring whether wearable fal
 ## Proposed defaults (change only if the team agrees; note it in PLAN.md)
 
 - The BME280 gives a heat index, and pressure lets us see altitude drops.
-- Location for the indoor demo: **zone set on the dashboard** (see decisions above), because GPS will not get a fix indoors. The GPS module still runs: firmware reads it, reports `gps_fix` (true or false), and fills `lat`/`lon` only when there is a fix. Outdoors, or near a window, a real fix replaces the zone.
+- Location for the indoor demo: **zone set on the dashboard** (see decisions above), because GPS will not get a fix indoors. The GPS module still runs: firmware reads it, reports `gps_fix` (true or false), and fills `lat`/`lon` only when there is a fix. Outdoors, or near a window, a real fix adds `lat`/`lon` next to the zone, and the map can use them instead.
 - Data path: ESP32 sends JSON over Wi-Fi (HTTP POST) to a server on a laptop. Moving that same server to a Raspberry Pi later should need no rewrite.
 - Fall detection runs **on the ESP32**, not on the laptop, so alerts survive a dropped connection.
 - A worn/not-worn sensor (IR proximity or microswitch inside the crown) so a helmet set down or tossed is not read as a fall. Fallback if it is cut: see decisions above.

@@ -64,7 +64,7 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
 - [ ] Fall state machine with thresholds in `firmware/config.h`. Add a `HAS_WORN_SENSOR` flag; when it is 0, send `worn: true`.
 - [ ] Send `zone: null` in telemetry and events (the server fills in the zone).
 - [ ] Wi-Fi client: POST telemetry (1 Hz) and fall events immediately.
-- [ ] Reconnect logic; fall events queued if Wi-Fi drops.
+- [ ] Reconnect logic; fall events queued if Wi-Fi drops. Each retry sends `sent_uptime_ms` (see `docs/PROTOCOL.md` 2.2).
 
 ### W3. Data and testing (Owner: TBD)
 - [ ] CSV logging mode (firmware or serial capture) at 100 Hz or better; store in `data/`.
@@ -76,15 +76,26 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
 
 ### W4. Server and dashboard (Owner: TBD)
 - [x] Pick the stack: Python FastAPI + SQLite (see section 8).
-- [ ] API: `POST /api/telemetry`, `POST /api/event`, `GET /api/devices`, `GET /api/incidents`, `PATCH /api/devices/{id}` (assign `name` and `zone`).
-- [ ] Server stamps each telemetry message and event with the device's assigned zone, and copies the device's current name into `worker_name` when it creates an incident.
-- [ ] Dashboard: a zone picker per device, labeled "simulated location".
-- [ ] SQLite storage for devices, telemetry, and incidents.
-- [ ] Dashboard: device list with names and status, incident list, zone map on a floor-plan image, heat color per worker.
-- [ ] Optional: simulator script that posts fake devices so the dashboard can be built before hardware is ready.
+
+**Server build phases.** Spec: `docs/PROTOCOL.md`. Work in order; each phase is done only when its "done when" check passes.
+
+- [ ] **S1. Setup and database** (~45 min). Create `server/` (`app/main.py`, `app/db.py`, `app/models.py`, `app/heat.py`, `tests/`), pinned `requirements.txt` (fastapi, uvicorn, pytest, httpx), `.gitignore` (`*.db`, `__pycache__`, `.venv`). SQLite tables `devices`, `telemetry`, `events` (unique on `device_id` + `uptime_ms`), `incidents`; WAL mode; times as ISO 8601 UTC.
+  *Done when:* `uvicorn app.main:app` starts, creates the database, and `pytest` runs (even with no tests yet).
+- [ ] **S2. Core routes** (~1.5 h). `POST /api/telemetry`, `POST /api/event`, `GET /api/devices`, `PATCH /api/devices/{id}`, `GET /api/incidents`. Server stamps `ts`, fills in the device's assigned zone, snapshots `worker_name`, ignores repeat events, sets `delayed`, marks `sim-` incidents `sample: true`, computes `online` (5 s) and `heat_level`. Write each test before its route.
+  *Done when:* tests pass for every route, including a repeat event returning the same `incident_id`, and a zone or name change applying to new incidents only.
+- [ ] **S3. Stretch routes** (~45 min). `POST /api/incidents`, `PATCH /api/incidents/{id}`, `GET /api/hazards`.
+  *Done when:* tests show that only `confirmed` incidents count toward hazards and that a manual `fall` report is rejected with 422.
+- [ ] **S4. Simulator** (~45 min). `server/simulator.py`, standard library only. Options: `--url`, `--devices`, `--fall-every`, `--heat-ramp`, `--resend`. Uses `sim-` device IDs.
+  *Done when:* with `--devices 3 --fall-every 30`, `GET /api/devices` shows 3 online devices and `GET /api/incidents` shows falls marked `sample: true`, with no duplicates under `--resend`.
+- [ ] **S5. Docs** (~15 min). `server/README.md`: install, run on `0.0.0.0:8000`, run the simulator, and reach the server from the ESP32 (including the WSL2 note in section 9). Tick these tasks; note anything unexpected in section 8.
+  *Done when:* a teammate can follow the README from a fresh clone to the simulator showing up on the dashboard.
+
+**Dashboard** (start once S2 is done; the simulator lets you build it before hardware is ready):
+- [ ] Device list with names and status, incident list, zone map on a floor-plan image, heat color per worker.
+- [ ] Zone picker per device, labeled "simulated location". Incidents with `sample: true` labeled "sample data".
 - [ ] Stretch: incident status (new, confirmed, dismissed) with confirm and dismiss controls.
 - [ ] Stretch: manual "report injury or hazard" form (zone and note).
-- [ ] Stretch: hazard map layer (red markers or shaded zones by confirmed incident count), a falls/heat layer toggle, and `GET /api/hazards`.
+- [ ] Stretch: hazard map layer (red markers or shaded zones by confirmed incident count) and a falls/heat layer toggle.
 
 ### W5. Research, pitch, and demo (Owner: TBD)
 - [ ] Send customer discovery emails (use the team doc; fill in names and contacts). Log replies.
@@ -150,6 +161,9 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 | GPS does not work indoors | GPS module is mounted and reports `gps_fix`; the indoor demo uses zone-based or simulated location, labeled as simulated; test a real fix outdoors |
 | Heat claim is overstated | Call it heat exposure; do not claim core temperature or heat stress |
 | LiPo safety on a head-mounted device | Module has built-in protection; keep it padded inside the enclosure, charge only via its USB-C, supervised charging, retire if swollen |
+| Server runs in WSL2, which the ESP32 cannot reach by default | Run the server on Windows Python, or forward port 8000 from Windows to WSL2 and allow it in the Windows firewall; test with a phone browser on the hotspot first |
+| Python 3.14 lacks wheels for a pinned package | Use a Python 3.12 virtual environment |
+| Simulator data mistaken for real data | `sim-` device IDs; their incidents are marked `sample: true` and labeled on the dashboard |
 | Time | Follow the cut order in section 6 |
 
 ## 10. Open questions

@@ -13,6 +13,7 @@ This file is the single source of truth for every message between the helmet, th
 - **Time:** the ESP32 has no real-time clock. It sends `uptime_ms` (milliseconds since boot) only. The server stamps every message on receipt as `ts`, an ISO 8601 UTC string, for example `"2026-11-06T15:04:05.123Z"`.
 - **Zone:** firmware always sends `"zone": null`. The server replaces it with the zone assigned to that device on the dashboard (section 4). The field stays in the payload so later firmware could report its own zone.
 - **Device IDs:** `helmet-01`, `helmet-02`, and so on, set in `firmware/config.h`. The server creates a device the first time it hears from a new `device_id`.
+- **Simulated devices:** the simulator (`server/simulator.py`) uses IDs starting with `sim-` (for example `sim-01`). Every incident from a `sim-` device gets `sample: true`, so the dashboard labels it "sample data". Real helmets must never use the `sim-` prefix.
 - **Zone IDs:** short strings that match the floor-plan image, for example `A1`, `A2`, `B1`. The dashboard's floor-plan config defines the list.
 
 ### Responses
@@ -74,12 +75,13 @@ Sent as soon as the fall state machine reaches `ALERT`.
 | `freefall_ms` | integer | How long free-fall lasted. |
 | `still_s` | number | How long the helmet stayed still before the alert. |
 | `zone` | null | Always `null` from firmware. |
+| `sent_uptime_ms` | integer, optional | Uptime when this POST was sent. Equal to `uptime_ms` on the first try; larger on retries. |
 
 Response: `{"ok": true, "incident_id": 17}`.
 
 **Retries:** if the POST fails, the helmet queues the event in RAM and retries every 2 s until it gets a `200`. The queue is lost on reboot. The server treats `(device_id, uptime_ms)` as the event's unique key: a repeat returns `200` with the same `incident_id` and does not create a second incident.
 
-**Late arrival:** a queued event is stamped with the time the server receives it, which can be later than the fall itself. The server sets `delayed: true` on the incident when the event's `uptime_ms` is more than 5 s behind the device's latest telemetry `uptime_ms`.
+**Late arrival:** a queued event is stamped with the time the server receives it, which can be later than the fall itself. The server sets `delayed: true` on the incident when `sent_uptime_ms - uptime_ms` is more than 5000. If `sent_uptime_ms` is missing, `delayed` is `false`. (Comparing with telemetry does not work, because no telemetry gets through while Wi-Fi is down.)
 
 ## 3. What the server does with incoming messages
 
@@ -194,3 +196,4 @@ The server maps `heat_index_c` to `heat_level` using the NWS heat index bands. T
 | Date | Change |
 |---|---|
 | 2026-11-06 | First version, from the data contract in `CLAUDE.md` and the decisions in `PLAN.md` section 8. |
+| 2026-11-06 | Added optional `sent_uptime_ms` to fall events and based `delayed` on it. Added the `sim-` device ID rule (incidents marked `sample: true`). |

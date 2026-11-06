@@ -79,7 +79,7 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
 
 **Server build phases.** Spec: `docs/PROTOCOL.md`. Work in order; each phase is done only when its "done when" check passes.
 
-- [ ] **S1. Setup and database** (~45 min). Create `server/` (`app/main.py`, `app/db.py`, `app/models.py`, `app/heat.py`, `tests/`), pinned `requirements.txt` (fastapi, uvicorn, pytest, httpx), `.gitignore` (`*.db`, `__pycache__`, `.venv`). SQLite tables `devices`, `telemetry`, `events` (unique on `device_id` + `uptime_ms`), `incidents`; WAL mode; times as ISO 8601 UTC.
+- [x] **S1. Setup and database** (~45 min). *Claimed: Claude (for Elijah), 2026-11-06.* Done 2026-11-06: server starts, creates all 4 tables, 7 tests pass. `models.py` and `heat.py` moved to S2, where the routes that use them are built. Create `server/` (`app/main.py`, `app/db.py`, `app/models.py`, `app/heat.py`, `tests/`), pinned `requirements.txt` (fastapi, uvicorn, pytest, httpx), `.gitignore` (`*.db`, `__pycache__`, `.venv`). SQLite tables `devices`, `telemetry`, `events` (unique on `device_id` + `uptime_ms`), `incidents`; WAL mode; times as ISO 8601 UTC.
   *Done when:* `uvicorn app.main:app` starts, creates the database, and `pytest` runs (even with no tests yet).
 - [ ] **S2. Core routes** (~1.5 h). `POST /api/telemetry`, `POST /api/event`, `GET /api/devices`, `PATCH /api/devices/{id}`, `GET /api/incidents`. Server stamps `ts`, fills in the device's assigned zone, snapshots `worker_name`, ignores repeat events, sets `delayed`, marks `sim-` incidents `sample: true`, computes `online` (5 s) and `heat_level`. Write each test before its route.
   *Done when:* tests pass for every route, including a repeat event returning the same `incident_id`, and a zone or name change applying to new incidents only.
@@ -144,6 +144,8 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 | 2026-11-06 | Incidents store a snapshot of the worker's name at creation time | team |
 | 2026-11-06 | Worn sensor: attempt it; if cut, firmware sends `worn: true` (`HAS_WORN_SENSOR 0`) and A6 becomes a stretch test | team |
 | 2026-11-06 | `docs/PROTOCOL.md` written: all routes, field types, retry/dedupe for fall events, heat-level bands, `hazard_report` incident type | team |
+| 2026-11-06 | Server deps install fine on Python 3.14 (fastapi 0.162.0, uvicorn 0.54.0, pytest 9.2.0, httpx 0.28.1). Starlette warns that `httpx` for TestClient is deprecated in favor of `httpx2`; harmless for now | Claude |
+| 2026-11-06 | If ROS is installed, its `PYTHONPATH` leaks into the venv and breaks pytest (`osrf_pycommon` missing). Run with `env -u PYTHONPATH` (goes in `server/README.md` in S5) | Claude |
 | | Battery runtime with Wi-Fi + GPS on: TBD (measure) | |
 | | Threshold values after tuning: TBD | |
 

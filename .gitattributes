@@ -1,0 +1,12 @@
+# Store text files with LF in the repo; Git converts on checkout as each
+# person's settings ask. Stops line-ending-only diffs between Windows and WSL/Mac.
+* text=auto eol=lf
+
+# Windows batch files need CRLF.
+*.bat text eol=crlf
+
+# Binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.stl binary

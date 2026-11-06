@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Server database (created on startup)
+*.db
+*.db-wal
+*.db-shm

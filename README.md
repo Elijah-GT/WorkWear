@@ -10,3 +10,4 @@ Hackathon MVP: a helmet-mounted sensor that detects falls and measures heat expo
 - [`docs/PROTOCOL.md`](docs/PROTOCOL.md): every message between helmet, server, and dashboard
 - [`server/README.md`](server/README.md): run the server and the fake-helmet simulator
 - [`dashboard/README.md`](dashboard/README.md): open and use the supervisor dashboard
+- [`firmware/README.md`](firmware/README.md): set up, flash, and check the ESP32 helmet firmware

@@ -1,0 +1,83 @@
+// config.h: every setting for the helmet firmware lives here.
+// Thresholds are starting values from CLAUDE.md; tune them from logged data (PLAN.md W3)
+// and record the final values in PLAN.md section 8.
+//
+// Wi-Fi name and password are NOT here: copy secrets.example.h to secrets.h (git ignores it).
+// This file must stay plain #defines so the logic tests can build it on a laptop.
+#pragma once
+
+// ---------------- Identity and server ----------------
+// helmet-01, helmet-02, ... Never start with "sim-" (that prefix marks simulator data).
+#define DEVICE_ID "helmet-01"
+// The laptop running the server, as the ESP32 sees it on the hotspot. Find it with
+// `ipconfig` on the laptop. Port 8000 (docs/PROTOCOL.md section 1).
+#define SERVER_URL "http://192.168.43.10:8000"
+
+#define HTTP_TIMEOUT_MS      3000   // no answer within 3 s = failure (PROTOCOL.md section 1)
+#define TELEMETRY_PERIOD_MS  1000   // about 1 Hz
+#define EVENT_RETRY_MS       2000   // retry queued fall events every 2 s (PROTOCOL.md 2.2)
+#define EVENT_QUEUE_SIZE     8      // fall events kept in RAM while Wi-Fi is down
+#define WIFI_RETRY_MS        10000  // restart the Wi-Fi connection if it has been down this long
+
+// ---------------- Serial ----------------
+// LOG_CSV 1 prints one CSV line per IMU sample for threshold tuning (PLAN.md W3).
+// Status lines start with "#" so they can be filtered out of the CSV.
+#define LOG_CSV 0
+#if LOG_CSV
+#define SERIAL_BAUD 921600          // 200 lines/s does not fit through 115200 baud
+#else
+#define SERIAL_BAUD 115200
+#endif
+#define STATUS_PERIOD_MS 5000       // human-readable status line (off while LOG_CSV is 1)
+
+// ---------------- I2C: BNO085 + BME280 ----------------
+#define I2C_SDA_PIN   21
+#define I2C_SCL_PIN   22
+#define I2C_CLOCK_HZ  400000        // drop to 100000 if the BNO085 is flaky
+#define BNO085_ADDR   0x4A          // 0x4B if the board's address pad is changed
+#define BNO085_RST_PIN 4            // wired per CLAUDE.md; the library pulses it at start-up
+#define BNO085_INT_PIN 19           // wired per CLAUDE.md; unused for now (library polls over I2C)
+#define BME280_ADDR   0x76          // 0x77 on some boards
+
+// IMU report rates (microseconds between samples)
+#define ACCEL_INTERVAL_US    5000   // 200 Hz: short impact spikes need a fast rate
+#define GYRO_INTERVAL_US     10000  // 100 Hz
+#define GRAVITY_INTERVAL_US  20000  // 50 Hz, used for tilt
+
+// Which IMU axis points up through the crown when the helmet is worn upright.
+// 0 = X, 1 = Y, 2 = Z. Sign 1 or -1. Check after mounting: tilt_deg should read
+// about 0 upright, 90 on its side, 180 upside down.
+#define IMU_UP_AXIS  2
+#define IMU_UP_SIGN  1
+
+#define ENV_PERIOD_MS 1000          // BME280 read rate
+
+// ---------------- GPS (GY-NEO6MV2 on UART2) ----------------
+#define GPS_BAUD          9600
+#define ESP_GPS_RX_PIN    16        // ESP32 receives here: connect to the GPS TX pin
+#define ESP_GPS_TX_PIN    17        // ESP32 sends here: connect to the GPS RX pin
+#define GPS_MAX_AGE_MS    3000      // a fix older than this counts as no fix
+
+// ---------------- Worn sensor ----------------
+// 0 = no sensor fitted: firmware always reports worn: true (decided 2026-11-06).
+// 1 = microswitch or IR proximity module on WORN_PIN.
+#define HAS_WORN_SENSOR    0
+#define WORN_PIN           27
+#define WORN_ACTIVE_LEVEL  LOW      // pin level that means "on a head" (switch to GND, pull-up on)
+#define WORN_DEBOUNCE_MS   500
+
+// ---------------- Fall detection ----------------
+// State machine: IDLE -> FREEFALL -> IMPACT -> STILL -> ALERT (see fall_detector.h).
+#define FREEFALL_G          0.4f    // total acceleration below this = free-fall
+#define FREEFALL_MIN_MS     100     // free-fall must last at least this long
+#define FREEFALL_MAX_MS     3000    // longer than this near 0 g = sensor fault, not a fall
+#define IMPACT_G            2.5f    // impact spike (try 2.5 to 3.0); the IMU clips near 8 g
+#define IMPACT_WINDOW_MS    500     // impact must come within this long after free-fall ends
+#define POST_IMPACT_SETTLE_MS 500   // ignore bounces this long after the impact
+#define STILL_ACCEL_TOL_G   0.15f   // "still" = total acceleration within 1 g +/- this
+#define STILL_GYRO_DPS      30.0f   // ... and rotating slower than this (degrees per second)
+#define STILL_MS            2000    // stillness needed before the alert
+#define STILL_WINDOW_MS     8000    // no stillness within this long after settling = recovered
+#define REQUIRE_TILT        0       // 1 = also require the helmet tilted away from upright
+#define MIN_TILT_DEG        45.0f   // used only when REQUIRE_TILT is 1
+#define ALERT_COOLDOWN_MS   10000   // ignore new falls this long after an alert

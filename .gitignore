@@ -4,6 +4,9 @@ __pycache__/
 .venv/
 .pytest_cache/
 
+# Firmware Wi-Fi password (copy firmware/secrets.example.h)
+firmware/secrets.h
+
 # Server database (created on startup)
 *.db
 *.db-wal

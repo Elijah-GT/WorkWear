@@ -58,6 +58,7 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
 - [ ] Wiring notes in `docs/WIRING.md`.
 
 ### W2. Firmware (Owner: TBD)
+- [x] **F0. Scaffold (code only).** *Claude (for Elijah), 2026-11-07.* Done: `firmware/` Arduino sketch with code for every task below. Compiles for the ESP32 (esp32 core 3.3.12, 81% of flash). 28 laptop tests of the fall logic, heat index, JSON and retry queue pass (`firmware/test/run_tests.sh`). The real server accepts its JSON, and a retried fall returns the same incident. **Nothing has run on hardware yet**, so the tasks below stay open until each is checked on the helmet. Setup and first power-up checklist: `firmware/README.md`.
 - [ ] Read BNO085 (accel, orientation) and BME280 over I2C; print to serial.
 - [ ] Read the GPS with TinyGPSPlus; report `gps_fix`, and `lat`/`lon` only when there is a fix.
 - [ ] Compute heat index from temperature and humidity. Use the same NOAA formula as `heat_index_c()` in `server/simulator.py` (tested against the NWS chart), so the helmet and simulator agree.
@@ -67,7 +68,7 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
 - [ ] Reconnect logic; fall events queued if Wi-Fi drops. Each retry sends `sent_uptime_ms` (see `docs/PROTOCOL.md` 2.2).
 
 ### W3. Data and testing (Owner: TBD)
-- [ ] CSV logging mode (firmware or serial capture) at 100 Hz or better; store in `data/`.
+- [ ] CSV logging mode (firmware or serial capture) at 100 Hz or better; store in `data/`. *Firmware side written: `LOG_CSV 1` in `firmware/config.h` prints about 200 lines/s at 921600 baud (see `firmware/README.md`); the actual rate is not yet measured on hardware.*
 - [ ] Safe test protocol: padded drops, sandbag, mattress. No people falling.
 - [ ] Collect normal-activity data (see A3) and fake-fall data.
 - [ ] Tune thresholds with the firmware owner; write results in section 8.
@@ -157,6 +158,10 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 | 2026-11-06 | Known limit: fall events are de-duplicated by `(device_id, uptime_ms)`, and `uptime_ms` restarts at 0 when a helmet reboots. A fall after a reboot at the exact same millisecond count as an earlier fall from that helmet would be treated as a repeat and dropped. Very unlikely; accepted for the MVP | Claude |
 | 2026-11-06 | Server decisions in S2: lat/lon are dropped when `gps_fix` is false; a helmet's own `zone` is ignored (the dashboard zone wins); unknown extra fields from the helmet are ignored, but unknown fields in `PATCH /api/devices` are rejected (catches typos); a device's name cannot be cleared, only its zone | Claude |
 | 2026-11-06 | **Server bug found by the dashboard, fixed:** with parallel requests (dashboard + helmets), about 40% of requests returned 500 (`SQLite objects created in a thread can only be used in that same thread`), including helmet telemetry. FastAPI can open a request's DB connection on one thread and run the route on another. Fixed with `check_same_thread=False` in `server/app/db.py` (each connection is still used by one request at a time); regression tests in `server/tests/test_concurrency.py`. Earlier "0 errors" server checks only sent one request at a time | Claude |
+| 2026-11-07 | Firmware: the worn flag is latched when a free-fall **starts**. A helmet set down or tossed (not worn at the start) does not alert; a helmet knocked off the head during a fall still alerts. This is how the code reads CLAUDE.md's "suppress alerts when `worn` is false" | Claude |
+| 2026-11-07 | Firmware pins picked (not in CLAUDE.md): BNO085 RST GPIO4, INT GPIO19 (wired but unused: the Adafruit library polls over I2C), worn sensor GPIO27. W1: confirm or change in `firmware/config.h` and record in `docs/WIRING.md` | Claude |
+| 2026-11-07 | Firmware: Wi-Fi and HTTP run on a separate task (core 0), because a failed POST can block for 3 s and would otherwise pause fall detection. The BME280 runs in forced mode, one reading a second, so it does not warm itself up. Wi-Fi name and password go in `firmware/secrets.h` (git-ignored), not `config.h` | Claude |
+| 2026-11-07 | Firmware: tilt comes from the BNO085 gravity report and assumes the IMU's +Z axis points up through the crown (`IMU_UP_AXIS`/`IMU_UP_SIGN`). Not yet checked on the real board | Claude |
 | | Battery runtime with Wi-Fi + GPS on: TBD (measure) | |
 | | Threshold values after tuning: TBD | |
 

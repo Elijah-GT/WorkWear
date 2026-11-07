@@ -1,0 +1,136 @@
+// Construction safety helmet firmware (hackathon MVP).
+// Reads the IMU, BME280, GPS and worn sensor; runs fall detection on the helmet; sends
+// telemetry and fall events to the server over Wi-Fi. Messages: docs/PROTOCOL.md.
+// Settings: config.h. Wi-Fi details: secrets.h (copy secrets.example.h). Setup: README.md.
+//
+// loop() (core 1) does sensors and fall detection only; all networking is on its own task
+// (net.cpp, core 0), so a slow server never stalls fall detection.
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <string.h>
+
+#include "config.h"
+#include "fall_detector.h"
+#include "heat_index.h"
+#include "net.h"
+#include "payload.h"
+#include "sensors.h"
+
+static FallDetector detector;
+static float accel_g = NAN;
+static float gyro_dps = NAN;
+static float tilt_deg = NAN;
+static EnvReading env = {NAN, NAN, NAN};
+static bool gps_has_fix = false;
+static uint32_t last_env_ms = 0;
+static uint32_t last_status_ms = 0;
+static uint32_t last_imu_retry_ms = 0;
+
+static void logStatus(const char* label, bool ok) {
+  Serial.printf("# %s: %s\n", label, ok ? "OK" : "NOT FOUND");
+}
+
+void setup() {
+  Serial.begin(SERIAL_BAUD);
+  delay(300);
+  Serial.println();
+  Serial.println("# Helmet firmware, device " DEVICE_ID);
+  if (strncmp(DEVICE_ID, "sim-", 4) == 0) {
+    Serial.println("# ERROR: DEVICE_ID must not start with \"sim-\" (reserved for the simulator)");
+  }
+#if !HAS_WORN_SENSOR
+  Serial.println("# No worn sensor (HAS_WORN_SENSOR 0): always reporting worn: true");
+#endif
+
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  Wire.setClock(I2C_CLOCK_HZ);
+  logStatus("BNO085 IMU", imuBegin());
+  if (!envBegin()) {
+    logStatus("BME280", false);
+    Serial.println("#   (check the address in config.h; a BMP280 also fails here, it has no humidity)");
+  } else {
+    logStatus("BME280", true);
+  }
+  gpsBegin();
+  wornBegin();
+  netBegin();
+
+#if LOG_CSV
+  Serial.println("t_ms,accel_g,gyro_dps,tilt_deg,worn,state");
+#endif
+}
+
+static void handleFallResult(FallResult r, const FallEvent& ev) {
+  switch (r) {
+    case FallResult::ALERT:
+      Serial.printf("# FALL ALERT: peak %.2f g, free-fall %lu ms, still %.1f s\n", ev.peak_g,
+                    (unsigned long)ev.freefall_ms, ev.still_s);
+      netQueueFall(ev);
+      break;
+    case FallResult::SUPPRESSED:
+      Serial.println("# fall ignored: helmet was not worn when it started");
+      break;
+    case FallResult::RECOVERED:
+      Serial.println("# fall cancelled: movement resumed (recovered)");
+      break;
+    case FallResult::NONE:
+      break;
+  }
+}
+
+void loop() {
+  const bool worn = wornRead();
+
+  // Every new accelerometer sample goes through the fall detector.
+  while (imuPoll(&accel_g, &gyro_dps, &tilt_deg)) {
+    const FallSample s = {millis(), accel_g, gyro_dps, tilt_deg, worn};
+    FallEvent ev;
+    const FallResult r = detector.update(s, &ev);
+#if LOG_CSV
+    Serial.printf("%lu,%.3f,%.1f,%.1f,%d,%s\n", (unsigned long)s.t_ms, s.accel_g, s.gyro_dps,
+                  s.tilt_deg, worn ? 1 : 0, FallDetector::stateName(detector.state()));
+#endif
+    handleFallResult(r, ev);
+  }
+
+  gpsPoll();
+  const uint32_t now = millis();
+
+  if (!imuOk() && now - last_imu_retry_ms >= 5000) {
+    last_imu_retry_ms = now;
+    logStatus("BNO085 IMU (retry)", imuBegin());
+  }
+
+  // About once a second: read the BME280 and hand a fresh reading to the network task.
+  if (now - last_env_ms >= ENV_PERIOD_MS) {
+    last_env_ms = now;
+    envRead(&env);
+    Telemetry t;
+    t.uptime_ms = now;
+    t.worn = worn;
+    t.temp_c = env.temp_c;
+    t.humidity_pct = env.humidity_pct;
+    t.pressure_hpa = env.pressure_hpa;
+    t.heat_index_c = heatIndexC(env.temp_c, env.humidity_pct);
+    t.accel_g = imuOk() ? accel_g : NAN;
+    t.tilt_deg = imuOk() ? tilt_deg : NAN;
+    t.gps_fix = gps_has_fix = gpsFix(&t.lat, &t.lon);
+    netPublishTelemetry(t);
+  }
+
+#if !LOG_CSV
+  if (now - last_status_ms >= STATUS_PERIOD_MS) {
+    last_status_ms = now;
+    Serial.printf(
+        "# accel %.2f g, tilt %.0f deg, %s | %.1f C, %.0f %% RH, heat index %.1f C, %.1f hPa | "
+        "GPS %s (%lu chars) | Wi-Fi %s, %u falls queued | worn %d\n",
+        accel_g, tilt_deg, FallDetector::stateName(detector.state()), env.temp_c,
+        env.humidity_pct, heatIndexC(env.temp_c, env.humidity_pct), env.pressure_hpa,
+        gps_has_fix ? "fix" : "no fix", (unsigned long)gpsCharsReceived(),
+        netWifiConnected() ? "up" : "down", (unsigned)netPendingFalls(), worn ? 1 : 0);
+  }
+#endif
+
+  delay(1);  // let the idle task run (keeps the watchdog happy)
+}

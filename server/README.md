@@ -43,7 +43,7 @@ All tests should pass. They use a temporary database, so they never touch your r
 - `--host 0.0.0.0` lets other devices on the network (the helmets) reach it. For use on your own laptop only, leave it out.
 - Check it is running: open <http://localhost:8000/docs> for the interactive API page, or <http://localhost:8000/api/devices> (shows `[]` until a helmet reports in).
 - The database is `server/workwear.db`, created on first start. To use a different file, set `WORKWEAR_DB=/path/to/file.db`. To start from empty, stop the server and delete `workwear.db`, `workwear.db-wal`, and `workwear.db-shm`.
-- Once `dashboard/` exists, the server also serves it at <http://localhost:8000/>.
+- The server also serves the supervisor dashboard at <http://localhost:8000/> (see [`dashboard/README.md`](../dashboard/README.md)).
 - Press Ctrl+C to stop.
 
 ## 4. Run fake helmets (simulator)

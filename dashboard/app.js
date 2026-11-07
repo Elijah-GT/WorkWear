@@ -136,6 +136,9 @@ async function save(card, body, what) {
     refreshNow();
   } catch (err) {
     showMessage(card, `Couldn't save ${what.toLowerCase()}: ${err.message}`, true);
+    // Show what the server still has, not the value that failed to save.
+    if ("name" in body) card.name.value = card.device.name;
+    if ("zone" in body) card.zone.value = card.device.zone ?? "";
   } finally {
     card.root.classList.remove("worker--saving");
   }

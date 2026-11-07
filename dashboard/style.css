@@ -185,3 +185,45 @@ h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap
 .badge--dismissed { background: #eceef2; color: var(--muted); }
 .badge--sample { background: #ede7f6; color: #4a2a8a; }
 .badge--late { background: #fff4e5; color: #8a4b00; }
+
+/* Site map (D4) */
+.map { display: grid; gap: 8px; }
+.map.empty { display: block; }
+.map__problems { background: var(--warn-bg); border: 1px solid #f0c27a; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 0.9rem; }
+.map__problems[hidden] { display: none; }
+.zone {
+  border: 2px solid var(--border); border-radius: 8px; padding: 8px; min-height: 110px; min-width: 0;
+  background: #fafbfc; display: flex; flex-direction: column; gap: 6px; transition: border-color 0.2s, background 0.2s;
+}
+.zone--fall { border-color: var(--bad); background: #fde8e7; }
+.zone__head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.zone__label { font-size: 1.05rem; }
+.zone__count { color: var(--muted); font-size: 0.8rem; }
+
+.dots { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.dot {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 3px 10px 3px 4px;
+  font-size: 0.9rem; font-weight: 600;
+}
+.dot__name { min-width: 0; overflow-wrap: anywhere; line-height: 1.2; }
+@media (max-width: 500px) {
+  .map { gap: 6px; }
+  .zone { padding: 6px; min-height: 90px; }
+  .dot { font-size: 0.8rem; padding: 2px 6px 2px 3px; gap: 4px; }
+  .dot__swatch { width: 14px; height: 14px; }
+}
+.dot__swatch { width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-block; border: 2px solid rgb(0 0 0 / 0.15); }
+.dot--offline { opacity: 0.5; border-style: dashed; }
+.dot--fall { border: 2px solid var(--bad); color: var(--bad); animation: pulse 1.2s ease-in-out infinite; }
+.dot__swatch--fall { background: #fde8e7; border-color: var(--bad); }
+@keyframes pulse { 50% { box-shadow: 0 0 0 5px rgb(179 38 30 / 0.25); } }
+@media (prefers-reduced-motion: reduce) { .dot--fall { animation: none; } }
+
+.map__off { margin-top: 10px; }
+.map__off[hidden] { display: none; }
+.map__offtitle { font-size: 0.9rem; color: var(--muted); margin: 0 0 6px; }
+
+.legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.legend .dot__swatch { width: 14px; height: 14px; }

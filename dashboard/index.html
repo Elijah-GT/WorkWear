@@ -48,8 +48,22 @@
 
     <section class="panel panel--map" aria-labelledby="h-map">
       <h2 id="h-map">Site map <span class="tag tag--sim">Simulated location</span></h2>
-      <p class="panel__note" id="site-name"></p>
-      <div id="map" class="empty">Loading map…</div>
+      <p class="panel__note"><span id="site-name"></span> Zones are set by the supervisor on each worker card, not measured.</p>
+      <div id="map-problems" class="map__problems" role="status" hidden></div>
+      <div id="map" class="map" aria-label="Site zones"></div>
+      <div class="map__off">
+        <h3 class="map__offtitle">Not on the map</h3>
+        <ul id="map-off" class="dots" aria-label="Workers with no zone on the map"></ul>
+      </div>
+      <ul class="legend" aria-label="Heat risk colors">
+        <li><span class="dot__swatch heat--normal"></span>Normal</li>
+        <li><span class="dot__swatch heat--caution"></span>Caution</li>
+        <li><span class="dot__swatch heat--extreme-caution"></span>Extreme caution</li>
+        <li><span class="dot__swatch heat--danger"></span>Danger</li>
+        <li><span class="dot__swatch heat--extreme-danger"></span>Extreme danger</li>
+        <li><span class="dot__swatch heat--none"></span>No reading</li>
+        <li><span class="dot__swatch dot__swatch--fall"></span>New fall</li>
+      </ul>
     </section>
 
     <section class="panel panel--incidents" aria-labelledby="h-incidents">

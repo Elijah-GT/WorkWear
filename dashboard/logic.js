@@ -159,3 +159,47 @@ export function checkNewFalls(incidents, baseline) {
     .sort((a, b) => b.id - a.id);
   return { baseline: maxId, falls };
 }
+
+// --- Site map (D4) ----------------------------------------------------------
+
+const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+
+// Places workers on the zone grid from dashboard/zones.json. Workers with no zone, or a zone
+// that is not in the file, go in offMap. Bad entries in the file are skipped and listed in
+// problems so the page can say what is wrong instead of drawing a broken map.
+export function mapLayout(zonesConfig, devices) {
+  const cols = Number.isInteger(zonesConfig?.cols) && zonesConfig.cols > 0 ? zonesConfig.cols : 0;
+  const rows = Number.isInteger(zonesConfig?.rows) && zonesConfig.rows > 0 ? zonesConfig.rows : 0;
+  const problems = [];
+  const cells = [];
+  const byId = new Map();
+  for (const z of zonesConfig?.zones ?? []) {
+    if (typeof z?.id !== "string" || !z.id) { problems.push("A zone has no id"); continue; }
+    if (byId.has(z.id)) { problems.push(`Zone ${z.id} is listed twice`); continue; }
+    const inGrid = Number.isInteger(z.col) && Number.isInteger(z.row)
+      && z.col >= 0 && z.col < cols && z.row >= 0 && z.row < rows;
+    if (!inGrid) { problems.push(`Zone ${z.id} is outside the ${cols} x ${rows} grid`); continue; }
+    const cell = { id: z.id, label: z.label ?? z.id, col: z.col, row: z.row, workers: [] };
+    byId.set(z.id, cell);
+    cells.push(cell);
+  }
+  const offMap = [];
+  for (const d of devices) {
+    const cell = d.zone ? byId.get(d.zone) : undefined;
+    (cell ? cell.workers : offMap).push(d);
+  }
+  for (const c of cells) c.workers.sort(byName);
+  offMap.sort(byName);
+  return { cols, rows, cells, offMap, problems };
+}
+
+// Text for a worker's dot on the map (also its tooltip), so the color is never the only cue.
+export function dotLabel(device) {
+  const level = device.latest?.heat_level ?? null;
+  const info = heatInfo(level);
+  const parts = [level ? `${info.label} heat risk` : info.label];
+  if (!device.online) parts.push("offline");
+  const l = device.latest;
+  if (l?.gps_fix && l.lat != null && l.lon != null) parts.push(`GPS ${l.lat.toFixed(5)}, ${l.lon.toFixed(5)}`);
+  return `${device.name}: ${parts.join(", ")}`;
+}

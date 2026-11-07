@@ -4,7 +4,8 @@
 import { getJSON, patchJSON } from "./api.js";
 import {
   checkNewFalls, formatAgo, formatClock, formatReading, heatInfo, incidentBadges, incidentPlace,
-  incidentTitle, incidentWho, isSimulated, lastSeenText, namePatch, summarize, zoneOptions, zonePatch,
+  dotLabel, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout, namePatch, summarize,
+  zoneOptions, zonePatch,
 } from "./logic.js";
 
 const REFRESH_MS = 1000;       // devices and incidents
@@ -299,6 +300,7 @@ $("alert-hide").addEventListener("click", () => {
   state.alerts = [];
   renderAlert();
   renderIncidents();
+  renderMap();
 });
 
 $("alert-show").addEventListener("click", () => {
@@ -407,6 +409,98 @@ function renderIncidents() {
   }
 }
 
+// --- Site map (D4) --------------------------------------------------------------
+// The zone grid is built once from zones.json. Each worker has one dot element that is moved
+// to its zone's cell when the zone changes, so it moves on the next refresh (within ~1 s).
+
+const dots = new Map(); // device_id -> { root, swatch, name }
+let mapKey = null;      // rebuild the grid only when zones.json gives a different layout
+const zoneLists = new Map(); // zone id -> { cell, list, count }
+
+function buildGrid(layout) {
+  const map = $("map");
+  zoneLists.clear();
+  if (layout.cells.length === 0) {
+    map.className = "map empty";
+    map.style.gridTemplateColumns = "";
+    map.replaceChildren(el("p", null, state.zones
+      ? "zones.json has no usable zones, so there is no map."
+      : "No map: zones.json could not be loaded."));
+    return;
+  }
+  map.className = "map";
+  map.style.gridTemplateColumns = `repeat(${layout.cols}, minmax(0, 1fr))`;
+  map.replaceChildren(...layout.cells.map((c) => {
+    const cell = el("section", "zone");
+    cell.dataset.zone = c.id;
+    cell.style.gridColumn = String(c.col + 1);
+    cell.style.gridRow = String(c.row + 1);
+    const head = el("div", "zone__head");
+    const count = el("span", "zone__count");
+    head.append(el("strong", "zone__label", c.label), count);
+    const list = el("ul", "dots");
+    list.setAttribute("aria-label", `Workers in zone ${c.label}`);
+    cell.append(head, list);
+    zoneLists.set(c.id, { cell, list, count });
+    return cell;
+  }));
+}
+
+function buildDot() {
+  const root = el("li", "dot");
+  const swatch = el("span", "dot__swatch");
+  swatch.setAttribute("aria-hidden", "true");
+  const name = el("span", "dot__name");
+  root.append(swatch, name);
+  return { root, swatch, name };
+}
+
+function placeDots(list, workers, fallen) {
+  workers.forEach((d, i) => {
+    let dot = dots.get(d.device_id);
+    if (!dot) { dot = buildDot(); dots.set(d.device_id, dot); }
+    const level = d.latest?.heat_level ?? null;
+    const fell = fallen.has(d.device_id);
+    dot.root.className = `dot${d.online ? "" : " dot--offline"}${fell ? " dot--fall" : ""}`;
+    dot.swatch.className = `dot__swatch ${heatInfo(level).css}`;
+    setText(dot.name, d.name);
+    const label = fell ? `${dotLabel(d)}, NEW FALL` : dotLabel(d);
+    if (dot.root.title !== label) { dot.root.title = label; dot.root.setAttribute("aria-label", label); }
+    if (list.children[i] !== dot.root) list.insertBefore(dot.root, list.children[i] ?? null);
+  });
+}
+
+function renderMap() {
+  const layout = mapLayout(state.zones, state.devices);
+  const key = JSON.stringify([layout.cols, layout.rows, layout.cells.map((c) => [c.id, c.label, c.col, c.row]), !!state.zones]);
+  if (key !== mapKey) { buildGrid(layout); mapKey = key; }
+
+  const problems = $("map-problems");
+  problems.hidden = layout.problems.length === 0;
+  setText(problems, layout.problems.length ? `Check dashboard/zones.json: ${layout.problems.join("; ")}.` : "");
+
+  const fallen = new Set(state.alerts.map((a) => a.device_id));
+  for (const c of layout.cells) {
+    const z = zoneLists.get(c.id);
+    if (!z) continue;
+    placeDots(z.list, c.workers, fallen);
+    setText(z.count, c.workers.length === 1 ? "1 worker" : `${c.workers.length} workers`);
+    z.cell.classList.toggle("zone--fall", c.workers.some((d) => fallen.has(d.device_id)));
+  }
+  placeDots($("map-off"), layout.offMap, fallen);
+  $("map-off").parentElement.hidden = layout.offMap.length === 0;
+
+  // Remove dots of helmets that are gone, and trim leftovers at the end of each list.
+  const ids = new Set(state.devices.map((d) => d.device_id));
+  for (const [id, dot] of dots) if (!ids.has(id)) { dot.root.remove(); dots.delete(id); }
+  for (const [, z] of zoneLists) {
+    const want = layout.cells.find((c) => c.id === z.cell.dataset.zone).workers.length;
+    while (z.list.children.length > want) z.list.lastElementChild.remove();
+  }
+  const off = $("map-off");
+  while (off.children.length > layout.offMap.length) off.lastElementChild.remove();
+}
+
 // --- Page --------------------------------------------------------------------
 
 function render() {
@@ -416,6 +510,7 @@ function render() {
   renderTiles();
   renderWorkers();
   renderIncidents();
+  renderMap();
 }
 
 loadZones();

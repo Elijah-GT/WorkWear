@@ -3,7 +3,8 @@ import { test } from "node:test";
 
 import {
   checkNewFalls, formatAgo, formatClock, formatReading, heatInfo, incidentBadges, incidentPlace,
-  incidentTitle, incidentWho, isSimulated, lastSeenText, namePatch, summarize, zoneOptions, zonePatch,
+  dotLabel, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout, namePatch, summarize,
+  zoneOptions, zonePatch,
 } from "../logic.js";
 
 test("isSimulated only matches the sim- prefix", () => {
@@ -162,4 +163,52 @@ test("checkNewFalls: a reset database (ids went down) alerts on its new falls", 
   assert.equal(r.baseline, 2);
   assert.deepEqual(r.falls.map((f) => f.id), [2]);
   assert.deepEqual(checkNewFalls([], 40), { baseline: 0, falls: [] });
+});
+
+// --- Site map (D4) ----------------------------------------------------------
+
+const grid = {
+  cols: 2, rows: 1,
+  zones: [{ id: "A1", label: "Gate", col: 0, row: 0 }, { id: "A2", col: 1, row: 0 }],
+};
+const dev = (id, zone, name = id) => ({ device_id: id, name, zone, online: true, latest: null });
+
+test("mapLayout puts workers in their zone, sorted by name", () => {
+  const m = mapLayout(grid, [dev("h3", "A2", "Zed"), dev("h1", "A2", "amy"), dev("h2", "A1", "Bo")]);
+  assert.equal(m.cols, 2);
+  assert.equal(m.rows, 1);
+  assert.deepEqual(m.cells.map((c) => [c.id, c.label, c.workers.map((w) => w.name)]),
+    [["A1", "Gate", ["Bo"]], ["A2", "A2", ["amy", "Zed"]]]);
+  assert.deepEqual(m.offMap, []);
+  assert.deepEqual(m.problems, []);
+});
+
+test("mapLayout lists workers with no zone or an unknown zone as off the map", () => {
+  const m = mapLayout(grid, [dev("h1", null), dev("h2", "Z9"), dev("h3", "A1")]);
+  assert.deepEqual(m.offMap.map((w) => w.device_id), ["h1", "h2"]);
+});
+
+test("mapLayout reports bad zones.json entries and skips them", () => {
+  const bad = { cols: 2, rows: 1, zones: [
+    { id: "A1", col: 0, row: 0 }, { id: "A1", col: 1, row: 0 }, { id: "X", col: 5, row: 0 }, { col: 1, row: 0 },
+  ] };
+  const m = mapLayout(bad, [dev("h1", "X")]);
+  assert.deepEqual(m.cells.map((c) => c.id), ["A1"]);
+  assert.equal(m.problems.length, 3);
+  assert.deepEqual(m.offMap.map((w) => w.device_id), ["h1"]);
+});
+
+test("mapLayout without a zones file puts everyone off the map", () => {
+  const m = mapLayout(null, [dev("h1", "A1")]);
+  assert.deepEqual(m.cells, []);
+  assert.equal(m.offMap.length, 1);
+});
+
+test("dotLabel gives name, heat risk, and offline / GPS details", () => {
+  const d = { ...dev("helmet-01", "A1", "Sam"), latest: { heat_level: "danger", gps_fix: false, lat: null, lon: null } };
+  assert.equal(dotLabel(d), "Sam: Danger heat risk");
+  assert.equal(dotLabel({ ...d, online: false }), "Sam: Danger heat risk, offline");
+  assert.equal(dotLabel({ ...d, latest: { heat_level: "normal", gps_fix: true, lat: 45.1, lon: -122.5 } }),
+    "Sam: Normal heat risk, GPS 45.10000, -122.50000");
+  assert.equal(dotLabel(dev("h", null, "Bo")), "Bo: No reading");
 });

@@ -6,8 +6,23 @@ import {
   checkNewFalls, dotLabel, formatAgo, formatClock, formatReading, hazardView, heatInfo, heatLevelFor,
   incidentBadges, incidentPlace, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout,
   namePatch, notesPatch, reportBody, statusActions, summarize, zoneHeatView, zoneName, zoneOptions, zonePatch,
-  fallMarkers, isMeasured, markerWhere, workerZone, zoneSourceText, zoneSpot,
+  fallMarkers, isMeasured, markerWhere, workerZone, zoneSourceText, zoneSpot, initials,
 } from "../logic.js";
+
+test("initials: short labels for worker dots in small zones", () => {
+  assert.equal(initials("sim-01"), "S1");
+  assert.equal(initials("helmet-12"), "H12");
+  assert.equal(initials("Helmet 12"), "H12");
+  assert.equal(initials("Alex Smith"), "AS");
+  assert.equal(initials("maria de la cruz"), "MC");
+  assert.equal(initials("Jordan"), "JO");
+  assert.equal(initials("J"), "J");
+  assert.equal(initials("007"), "7");
+  assert.equal(initials("  "), "?");
+  assert.equal(initials(null), "?");
+  assert.equal(initials("Élodie Ñuñez"), "ÉÑ");
+  assert.ok(initials("x-123456789").length <= 3, "never more than 3 characters");
+});
 
 test("isSimulated only matches the sim- prefix", () => {
   assert.equal(isSimulated("sim-01"), true);

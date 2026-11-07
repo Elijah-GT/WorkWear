@@ -4,7 +4,7 @@
 import { getJSON, patchJSON, postJSON } from "./api.js";
 import {
   checkNewFalls, dotLabel, fallMarkers, formatAgo, formatClock, formatReading, hazardView, heatInfo,
-  incidentBadges, incidentPlace, incidentTitle, incidentWho, isMeasured, isSimulated, lastSeenText,
+  incidentBadges, incidentPlace, incidentTitle, incidentWho, initials, isMeasured, isSimulated, lastSeenText,
   mapLayout, markerWhere, namePatch, notesPatch, reportBody, statusActions, summarize, workerZone,
   zoneHeatView, zoneName, zoneOptions, zonePatch, zoneSourceText,
 } from "./logic.js";
@@ -131,6 +131,7 @@ function setView(view) {
   document.body.dataset.view = view;
   for (const b of document.querySelectorAll(".tabbar__btn")) b.setAttribute("aria-pressed", String(b.dataset.view === view));
   document.querySelector(".layout").scrollTop = 0; // only the area under the header scrolls
+  if (view === "map") fitZones(); // zones can only be measured while the map is showing
 }
 
 for (const b of document.querySelectorAll(".tabbar__btn")) b.addEventListener("click", () => setView(b.dataset.view));
@@ -745,9 +746,52 @@ function buildDot() {
   const swatch = el("span", "dot__swatch");
   swatch.setAttribute("aria-hidden", "true");
   const name = el("span", "dot__name");
-  root.append(swatch, name);
-  return { root, swatch, name };
+  const short = el("span", "dot__initials"); // shown instead of swatch + name in a crowded zone
+  short.setAttribute("aria-hidden", "true");
+  root.append(swatch, name, short);
+  // Tap or click a worker to see their card (phones have no hover to show the full name).
+  root.tabIndex = 0;
+  root.setAttribute("role", "button");
+  root.addEventListener("click", () => showCard(root.dataset.id));
+  root.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showCard(root.dataset.id); }
+  });
+  return { root, swatch, name, short };
 }
+
+function showCard(deviceId) {
+  const card = cards.get(deviceId);
+  if (!card) return;
+  setView("workers");
+  card.root.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.root.classList.remove("worker--flash");
+  void card.root.offsetWidth; // restart the highlight
+  card.root.classList.add("worker--flash");
+}
+
+// A zone on the floor plan too small for its name tags shows its workers as initials instead
+// (style.css .zone--compact); if even that does not fit, one "3 workers" tag (.zone--tight).
+// So tags never spill into the next zone. Checked on every redraw.
+function zoneSpills(cell) {
+  const box = cell.getBoundingClientRect();
+  return [...cell.querySelectorAll(".zone__label, .zone__layer, .zone__fall, .zone__count, .dot")].some((e) => {
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && (r.bottom > box.bottom - 2 || r.right > box.right - 2);
+  });
+}
+
+function fitZones() {
+  for (const [, z] of zoneLists) {
+    const cell = z.cell;
+    if (!cell.closest(".map--plan")) continue;
+    cell.classList.remove("zone--compact", "zone--tight");
+    if (!cell.getBoundingClientRect().height) continue; // map not showing
+    if (!zoneSpills(cell)) continue;
+    cell.classList.add("zone--compact");
+    if (zoneSpills(cell)) cell.classList.add("zone--tight");
+  }
+}
+window.addEventListener("resize", fitZones);
 
 function placeDots(list, workers, fallen) {
   workers.forEach((d, i) => {
@@ -758,7 +802,10 @@ function placeDots(list, workers, fallen) {
     const measured = isMeasured(workerZone(d).source);
     dot.root.className = `dot${d.online ? "" : " dot--offline"}${fell ? " dot--fall" : ""}${measured ? " dot--measured" : ""}`;
     dot.swatch.className = `dot__swatch ${heatInfo(level).css}`;
+    dot.short.className = `dot__initials ${heatInfo(level).css}`;
+    dot.root.dataset.id = d.device_id;
     setText(dot.name, d.name);
+    setText(dot.short, initials(d.name));
     const label = fell ? `${dotLabel(d)}, NEW FALL` : dotLabel(d);
     if (dot.root.title !== label) { dot.root.title = label; dot.root.setAttribute("aria-label", label); }
     if (list.children[i] !== dot.root) list.insertBefore(dot.root, list.children[i] ?? null);
@@ -795,12 +842,14 @@ function renderMap() {
     const v = state.layer === "heat" ? zoneHeatView(h) : hazardView(h);
     let cls = state.layer === "heat" ? `zone zone--heat zone--heat-${v.level ?? "none"}` : `zone zone--shade-${v.shade}`;
     if (hasFall) cls += " zone--fall";
+    for (const fit of ["zone--compact", "zone--tight"]) if (z.cell.classList.contains(fit)) cls += ` ${fit}`; // fitZones decides
     if (z.cell.className !== cls) z.cell.className = cls;
     setText(z.layer, v.badge ?? "");
     const label = `${c.label}: ${hasFall ? "NEW FALL, " : ""}${v.text}, ${workers}`;
     if (z.cell.title !== label) { z.cell.title = label; z.cell.setAttribute("aria-label", label); }
   }
   $("legend-incidents").hidden = state.layer === "heat";
+  fitZones();
   renderMarkers(layout);
   renderLocationLabels();
   placeDots($("map-off"), layout.offMap, fallen);

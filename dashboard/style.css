@@ -443,6 +443,44 @@ body[data-view="map"] .footer { display: none; }
 .map--plan .zone .dots { pointer-events: none; }
 .map--plan .zone .dot { pointer-events: auto; }
 
+/* Worker dots open the worker's card (app.js showCard). */
+.dot { cursor: pointer; }
+.dot:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.worker--flash { animation: worker-flash 1.6s ease-out; }
+@keyframes worker-flash { 0%, 40% { box-shadow: 0 0 0 4px var(--accent); } 100% { box-shadow: 0 0 0 4px transparent; } }
+
+/* A zone too small for its name tags (app.js fitZones): workers become initials in their heat
+   color, labels shrink, so nothing spills into the next zone. The full name is in the tooltip
+   and a tap opens the worker's card. */
+.dot__initials { display: none; }
+.map--plan .zone--compact { gap: 2px; padding: 2px; }
+.map--plan .zone--compact .dot {
+  padding: 0; gap: 0; border: 0; border-radius: 50%; background: transparent; font-size: 0.7rem;
+}
+.map--plan .zone--compact .dot__swatch, .map--plan .zone--compact .dot__name { display: none; }
+.map--plan .zone--compact .dot__initials {
+  display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 3px; border-radius: 11px;
+  font-size: 0.66rem; font-weight: 800; letter-spacing: -0.02em; color: #fff;
+  border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25);
+}
+/* Dark text on the light heat colors so the initials stay readable */
+.map--plan .zone--compact .dot__initials.heat--caution,
+.map--plan .zone--compact .dot__initials.heat--extreme-caution,
+.map--plan .zone--compact .dot__initials.heat--none { color: var(--text); }
+.map--plan .zone--compact .dot--measured { box-shadow: 0 0 0 2px var(--accent); }
+.map--plan .zone--compact .dot--fall { border: 2px solid var(--bad); }
+.map--plan .zone--compact .zone__label { font-size: 0.62rem; padding: 0 3px; }
+.map--plan .zone--compact .zone__layer, .map--plan .zone--compact .zone__fall { font-size: 0.56rem; padding: 0 3px; }
+@media (max-width: 500px) {
+  .map--plan .zone--compact .dot__initials { min-width: 18px; height: 18px; padding: 0 2px; font-size: 0.56rem; border-width: 1px; }
+}
+/* Still too small: one "3 workers" tag instead of separate dots (the Workers tab has them all). */
+.map--plan .zone--tight .dots { display: none; }
+.map--plan .zone--tight .zone__count {
+  display: inline-block; position: relative; z-index: 4; font-size: 0.56rem; font-weight: 700; color: var(--text);
+  background: rgb(255 255 255 / 0.92); border: 1px solid var(--accent); border-radius: 6px; padding: 0 3px;
+}
+
 /* Fall dots on the floor plan. Solid = at its GPS position; dashed ring = approximate (a steady
    spot inside the zone it was recorded in). Bright = not reviewed, dark = confirmed. */
 .map__markers { position: absolute; inset: 0; pointer-events: none; z-index: 3; }

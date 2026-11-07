@@ -263,6 +263,22 @@ export function dotLabel(device) {
   return `${device.name}: ${parts.join(", ")}`;
 }
 
+// Short label for a worker dot in a zone too small for full names: a first letter plus the number
+// at the end ("sim-01" -> "S1", "Helmet 12" -> "H12"), else two initials ("Alex Smith" -> "AS"),
+// else the first two letters ("Jordan" -> "JO"). At most 3 characters.
+export function initials(name) {
+  const s = String(name ?? "").trim();
+  if (!s) return "?";
+  const num = s.match(/(\d+)$/);
+  const words = s.slice(0, num ? -num[1].length : undefined).split(/[\s._-]+/).filter(Boolean);
+  const first = words.length ? Array.from(words[0])[0] : "";
+  let out;
+  if (num) out = first + String(Number(num[1]));
+  else if (words.length >= 2) out = first + Array.from(words[words.length - 1])[0];
+  else out = Array.from(s).slice(0, 2).join("");
+  return Array.from(out.toUpperCase()).slice(0, 3).join("");
+}
+
 // --- Fall markers on the floor plan (2026-11-07) -------------------------------
 
 // A steady spot inside a zone for an incident (fractions of the zone's width and height), so

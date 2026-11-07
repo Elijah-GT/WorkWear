@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WorkWear site safety</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>WorkWear</h1>
+      <span class="subtitle">Site safety dashboard</span>
+    </div>
+    <div id="conn" class="conn conn--wait" role="status" aria-live="polite">Connecting…</div>
+  </header>
+
+  <section class="tiles" aria-label="Summary">
+    <div class="tile"><span class="tile__value" id="t-online">–</span><span class="tile__label">Workers online</span></div>
+    <div class="tile"><span class="tile__value" id="t-new">–</span><span class="tile__label">New incidents</span></div>
+    <div class="tile"><span class="tile__value" id="t-incidents">–</span><span class="tile__label">Recent incidents</span></div>
+    <div class="tile"><span class="tile__value" id="t-sim">–</span><span class="tile__label">Simulated helmets</span></div>
+  </section>
+
+  <main class="layout">
+    <section class="panel panel--workers" aria-labelledby="h-workers">
+      <h2 id="h-workers">Workers</h2>
+      <div id="workers" class="empty">Waiting for helmets…</div>
+    </section>
+
+    <section class="panel panel--map" aria-labelledby="h-map">
+      <h2 id="h-map">Site map <span class="tag tag--sim">Simulated location</span></h2>
+      <p class="panel__note" id="site-name"></p>
+      <div id="map" class="empty">Loading map…</div>
+    </section>
+
+    <section class="panel panel--incidents" aria-labelledby="h-incidents">
+      <h2 id="h-incidents">Incidents</h2>
+      <div id="incidents" class="empty">No incidents yet.</div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Heat risk is based on ambient temperature and humidity at the helmet, not body temperature.
+    Location is a zone set by the supervisor (simulated). Data from simulated helmets is labeled as sample data.
+  </footer>
+</body>
+</html>

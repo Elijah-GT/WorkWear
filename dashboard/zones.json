@@ -1,0 +1,13 @@
+{
+  "site": "Demo site (generic grid)",
+  "cols": 3,
+  "rows": 2,
+  "zones": [
+    { "id": "A1", "label": "A1", "col": 0, "row": 0 },
+    { "id": "A2", "label": "A2", "col": 1, "row": 0 },
+    { "id": "A3", "label": "A3", "col": 2, "row": 0 },
+    { "id": "B1", "label": "B1", "col": 0, "row": 1 },
+    { "id": "B2", "label": "B2", "col": 1, "row": 1 },
+    { "id": "B3", "label": "B3", "col": 2, "row": 1 }
+  ]
+}

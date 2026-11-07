@@ -1,0 +1,91 @@
+/* WorkWear dashboard. Large and high-contrast so it reads on a projector or phone. */
+
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --text: #16181d;
+  --muted: #5b6270;
+  --border: #d9dce3;
+  --accent: #1f5fbf;
+  --ok: #1e7f3c;
+  --bad: #b3261e;
+  --warn-bg: #fff4e5;
+
+  /* Heat risk colors, PROTOCOL.md section 7 */
+  --heat-normal: #2e9e4f;
+  --heat-caution: #e0b100;
+  --heat-extreme-caution: #ec7a08;
+  --heat-danger: #d0312d;
+  --heat-extreme-danger: #7a0d0d;
+  --heat-none: #9aa0aa;
+
+  --radius: 10px;
+  --gap: 16px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; padding: 0 16px 24px; }
+
+h1, h2 { margin: 0; }
+h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* Top bar */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--gap);
+  padding: 14px 0; flex-wrap: wrap;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand h1 { font-size: 1.6rem; }
+.subtitle { color: var(--muted); }
+
+.conn { padding: 6px 12px; border-radius: 999px; font-weight: 600; border: 2px solid transparent; }
+.conn--wait { background: #eceef2; color: var(--muted); }
+.conn--up { background: #e6f4ea; color: var(--ok); }
+.conn--down { background: #fde8e7; color: var(--bad); border-color: var(--bad); }
+
+/* Summary tiles */
+.tiles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+.tile {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 16px; display: flex; flex-direction: column;
+}
+.tile__value { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile__label { color: var(--muted); }
+
+/* Main layout: workers + map on the left, incidents on the right; stacked on narrow screens */
+.layout {
+  display: grid; gap: var(--gap);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-areas: "workers incidents" "map incidents";
+  align-items: start;
+}
+.panel--workers { grid-area: workers; }
+.panel--map { grid-area: map; }
+.panel--incidents { grid-area: incidents; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "workers" "map" "incidents"; }
+}
+
+.panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; min-width: 0;
+}
+.panel h2 { margin-bottom: 12px; }
+.panel__note { margin: -6px 0 10px; color: var(--muted); font-size: 0.9rem; }
+.empty { color: var(--muted); padding: 8px 0; }
+
+/* Tags and badges */
+.tag {
+  display: inline-block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px;
+}
+.tag--sim { background: #ede7f6; color: #4a2a8a; }
+
+.footer { margin-top: 20px; color: var(--muted); font-size: 0.85rem; max-width: 70ch; }

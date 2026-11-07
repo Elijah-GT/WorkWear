@@ -90,7 +90,15 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
 - [x] **S5. Docs** (~15 min). *Claude (for Elijah), 2026-11-06.* Done: `server/README.md` (install, tests, run, simulator, ESP32 networking incl. WSL2, troubleshooting), linked from the top-level `README.md`. Checked by following it in a fresh clone: install, 124 tests, server on `0.0.0.0:8000`, 3 simulated helmets online. The "visible on the dashboard" part waits for the dashboard; the WSL2/firewall steps are not yet tested with a real phone or ESP32. `server/README.md`: install, run on `0.0.0.0:8000`, run the simulator, and reach the server from the ESP32 (including the WSL2 note in section 9). Tick these tasks; note anything unexpected in section 8.
   *Done when:* a teammate can follow the README from a fresh clone to the simulator showing up on the dashboard.
 
-**Dashboard** (start once S2 is done; the simulator lets you build it before hardware is ready):
+**Dashboard** (start once S2 is done; the simulator lets you build it before hardware is ready). *Claimed: Claude (for Elijah), 2026-11-06.* Plain HTML/CSS/JS in `dashboard/`, no build step and no internet needed; generic 2x3 zone grid in `dashboard/zones.json`. Phases:
+- [x] **D1. Skeleton:** page at `/`, refreshes every second, connection indicator. *Done when:* live counts with the simulator; "can't reach server" within 3 s of stopping it. Done 2026-11-06: checked in headless Chrome with the simulator (live counts) and with a test server that stops answering ("Can't reach server", last counts kept). 4 `node --test` tests pass. The browser-tool plugin could not start Chrome in WSL; headless Windows Chrome (`chrome.exe --headless=new`) works for screenshots.
+- [ ] **D2. Workers:** cards with name, online, heat risk, worn, last seen; rename and zone picker. *Done when:* changes survive a refresh and appear on the next incident.
+- [ ] **D3. Incidents + fall alert:** newest-first list with sample/delayed/status badges; banner (and optional sound) for new falls. *Done when:* a simulator fall shows the banner within ~2 s; old falls don't trigger it.
+- [ ] **D4. Site map:** zone grid with worker dots colored by heat risk, "Simulated location" label. *Done when:* changing a zone moves the dot within ~1 s.
+- [ ] **D5. Stretch:** confirm/dismiss/notes, manual report form, hazard shading, falls/heat toggle, sample note. *Done when:* A7 passes.
+- [ ] **D6. Docs + check:** how to open it, screenshots at desktop and phone width.
+
+Original task list (covered by the phases above):
 - [ ] Device list with names and status, incident list, zone map on a floor-plan image, heat color per worker.
 - [ ] Zone picker per device, labeled "simulated location". Incidents with `sample: true` labeled "sample data".
 - [ ] Stretch: incident status (new, confirmed, dismissed) with confirm and dismiss controls.

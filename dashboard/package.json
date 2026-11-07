@@ -1,0 +1,9 @@
+{
+  "name": "workwear-dashboard",
+  "private": true,
+  "description": "Supervisor dashboard. Plain ES modules, no dependencies. Tests: node --test",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

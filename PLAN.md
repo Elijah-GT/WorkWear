@@ -60,7 +60,7 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
 ### W2. Firmware (Owner: TBD)
 - [ ] Read BNO085 (accel, orientation) and BME280 over I2C; print to serial.
 - [ ] Read the GPS with TinyGPSPlus; report `gps_fix`, and `lat`/`lon` only when there is a fix.
-- [ ] Compute heat index from temperature and humidity.
+- [ ] Compute heat index from temperature and humidity. Use the same NOAA formula as `heat_index_c()` in `server/simulator.py` (tested against the NWS chart), so the helmet and simulator agree.
 - [ ] Fall state machine with thresholds in `firmware/config.h`. Add a `HAS_WORN_SENSOR` flag; when it is 0, send `worn: true`.
 - [ ] Send `zone: null` in telemetry and events (the server fills in the zone).
 - [ ] Wi-Fi client: POST telemetry (1 Hz) and fall events immediately.
@@ -85,7 +85,7 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
   *Done when:* tests pass for every route, including a repeat event returning the same `incident_id`, and a zone or name change applying to new incidents only.
 - [ ] **S3. Stretch routes** (~45 min). `POST /api/incidents`, `PATCH /api/incidents/{id}`, `GET /api/hazards`.
   *Done when:* tests show that only `confirmed` incidents count toward hazards and that a manual `fall` report is rejected with 422.
-- [ ] **S4. Simulator** (~45 min). `server/simulator.py`, standard library only. Options: `--url`, `--devices`, `--fall-every`, `--heat-ramp`, `--resend`. Uses `sim-` device IDs.
+- [x] **S4. Simulator** (~45 min). *Claude (for Elijah), 2026-11-06; done before S3 so the dashboard can start.* Done: 89 tests pass; a 32 s live run with `--devices 3 --fall-every 30 --resend` showed 3 online helmets, 1 sample incident, no duplicate, 0 server errors. Also has `--duration` and `--seed`, retries falls when the server is down, and tilts a helmet for 5 s after it falls. `server/simulator.py`, standard library only. Options: `--url`, `--devices`, `--fall-every`, `--heat-ramp`, `--resend`. Uses `sim-` device IDs.
   *Done when:* with `--devices 3 --fall-every 30`, `GET /api/devices` shows 3 online devices and `GET /api/incidents` shows falls marked `sample: true`, with no duplicates under `--resend`.
 - [ ] **S5. Docs** (~15 min). `server/README.md`: install, run on `0.0.0.0:8000`, run the simulator, and reach the server from the ESP32 (including the WSL2 note in section 9). Tick these tasks; note anything unexpected in section 8.
   *Done when:* a teammate can follow the README from a fresh clone to the simulator showing up on the dashboard.

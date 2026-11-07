@@ -34,7 +34,7 @@
 #define I2C_SDA_PIN   21
 #define I2C_SCL_PIN   22
 #define I2C_CLOCK_HZ  400000        // drop to 100000 if the BNO085 is flaky
-#define BNO085_ADDR   0x4A          // 0x4B if the board's address pad is changed
+#define BNO085_ADDR   0x4B          // our GY-BNO085 answers at 0x4B (I2C scan 2026-11-07); some boards use 0x4A
 #define BNO085_RST_PIN 4            // wired per CLAUDE.md; the library pulses it at start-up
 #define BNO085_INT_PIN 19           // wired per CLAUDE.md; unused for now (library polls over I2C)
 #define BME280_ADDR   0x76          // 0x77 on some boards

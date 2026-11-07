@@ -3,8 +3,8 @@
 
 import { getJSON, patchJSON } from "./api.js";
 import {
-  formatAgo, formatReading, heatInfo, isSimulated, lastSeenText, namePatch, summarize,
-  zoneOptions, zonePatch,
+  checkNewFalls, formatAgo, formatClock, formatReading, heatInfo, incidentBadges, incidentPlace,
+  incidentTitle, incidentWho, isSimulated, lastSeenText, namePatch, summarize, zoneOptions, zonePatch,
 } from "./logic.js";
 
 const REFRESH_MS = 1000;       // devices and incidents
@@ -16,6 +16,8 @@ const state = {
   incidents: [],
   lastOkAt: null,       // Date.now() of the last successful refresh
   error: null,          // message if the last refresh failed
+  alertBaseline: null,  // highest incident id already checked for falls (logic.js checkNewFalls)
+  alerts: [],           // falls that arrived while the page was open and are not hidden yet, newest first
 };
 
 const $ = (id) => document.getElementById(id);
@@ -59,6 +61,12 @@ async function refresh() {
     ]);
     state.devices = devices;
     state.incidents = incidents;
+    const found = checkNewFalls(incidents, state.alertBaseline);
+    state.alertBaseline = found.baseline;
+    if (found.falls.length) {
+      state.alerts = [...found.falls, ...state.alerts];
+      beep();
+    }
     state.lastOkAt = Date.now();
     state.error = null;
   } catch (err) {
@@ -255,13 +263,159 @@ function renderWorkers() {
   }
 }
 
+// --- Fall alert (D3) ----------------------------------------------------------
+// A banner for falls that arrive while the page is open. It stays until someone hides it.
+// Falls that were already in the list when the page loaded do not raise it.
+
+const BASE_TITLE = document.title;
+
+function badgeEls(badges) {
+  return badges.map((b) => el("span", `badge ${b.css}`, b.label));
+}
+
+function renderAlert() {
+  const box = $("alert");
+  if (state.alerts.length === 0) {
+    box.hidden = true;
+    document.title = BASE_TITLE;
+    return;
+  }
+  const fall = state.alerts[0];
+  setText("alert-title", `FALL: ${incidentWho(fall)}`);
+  const peak = fall.peak_g != null ? ` · peak ${fall.peak_g} g` : "";
+  setText("alert-detail", `${incidentPlace(fall)} · ${formatClock(fall.ts, Date.now())}${peak}`);
+  const key = JSON.stringify(incidentBadges(fall));
+  if ($("alert-badges").dataset.key !== key) {
+    $("alert-badges").replaceChildren(...badgeEls(incidentBadges(fall)));
+    $("alert-badges").dataset.key = key;
+  }
+  const more = state.alerts.length - 1;
+  setText("alert-more", more ? `+ ${more} more new fall${more > 1 ? "s" : ""} (see the list)` : "");
+  box.hidden = false;
+  document.title = `(${state.alerts.length}) FALL · ${BASE_TITLE}`;
+}
+
+$("alert-hide").addEventListener("click", () => {
+  state.alerts = [];
+  renderAlert();
+  renderIncidents();
+});
+
+$("alert-show").addEventListener("click", () => {
+  const row = state.alerts[0] && rows.get(state.alerts[0].id);
+  if (!row) return;
+  row.root.scrollIntoView({ behavior: "smooth", block: "center" });
+  row.root.focus({ preventScroll: true });
+});
+
+// Optional sound. Browsers only allow audio after a click on the page, so it starts off
+// and the supervisor turns it on with the button.
+let audio = null;
+
+function beep() {
+  if (!audio || audio.state !== "running") return;
+  const t0 = audio.currentTime;
+  for (let i = 0; i < 3; i++) {
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = "square";
+    osc.frequency.value = i % 2 ? 660 : 880;
+    gain.gain.setValueAtTime(0.15, t0 + i * 0.25);
+    gain.gain.setValueAtTime(0, t0 + i * 0.25 + 0.18);
+    osc.connect(gain).connect(audio.destination);
+    osc.start(t0 + i * 0.25);
+    osc.stop(t0 + i * 0.25 + 0.2);
+  }
+}
+
+$("sound").addEventListener("click", async () => {
+  const btn = $("sound");
+  const turnOn = btn.getAttribute("aria-pressed") !== "true";
+  try {
+    if (turnOn) {
+      audio ??= new AudioContext();
+      await audio.resume();
+      beep(); // test sound, so the supervisor knows it works
+    } else if (audio) {
+      await audio.suspend();
+    }
+    btn.setAttribute("aria-pressed", String(turnOn));
+    setText(btn, `Alert sound: ${turnOn ? "on" : "off"}`);
+  } catch (err) {
+    setText(btn, "Alert sound: not available");
+    btn.title = err.message;
+  }
+});
+
+// --- Incidents (D3) ------------------------------------------------------------
+// Rows are kept by incident id and updated in place, like the worker cards.
+
+const rows = new Map(); // incident id -> { root, parts... }
+
+function buildRow(inc) {
+  const root = el("li", "incident");
+  root.id = `inc-${inc.id}`;
+  root.tabIndex = -1;
+  const top = el("div", "incident__top");
+  const title = el("strong", "incident__title");
+  const badges = el("span", "incident__badges");
+  top.append(title, badges);
+  const who = el("div", "incident__who");
+  const place = el("div", "incident__place");
+  const time = el("div", "incident__time");
+  const notes = el("div", "incident__notes");
+  root.append(top, who, place, time, notes);
+  return { root, title, badges, who, place, time, notes, badgeKey: null };
+}
+
+function updateRow(row, inc, now, alerting) {
+  row.root.className = `incident incident--${inc.type}${alerting ? " incident--alerting" : ""}`;
+  setText(row.title, `${incidentTitle(inc.type)} #${inc.id}`);
+  const badges = incidentBadges(inc);
+  const key = JSON.stringify(badges);
+  if (key !== row.badgeKey) {
+    row.badges.replaceChildren(...badgeEls(badges));
+    row.badgeKey = key;
+  }
+  setText(row.who, incidentWho(inc));
+  setText(row.place, inc.peak_g != null ? `${incidentPlace(inc)} · peak ${inc.peak_g} g` : incidentPlace(inc));
+  setText(row.time, formatClock(inc.ts, now));
+  setText(row.notes, inc.notes ? `Notes: ${inc.notes}` : "");
+  row.notes.hidden = !inc.notes;
+}
+
+function renderIncidents() {
+  const container = $("incidents");
+  const empty = state.incidents.length === 0;
+  $("incidents-empty").hidden = !empty;
+  container.hidden = empty;
+  const now = Date.now();
+  const alerting = new Set(state.alerts.map((a) => a.id));
+  const seen = new Set();
+  state.incidents.forEach((inc, i) => {
+    seen.add(inc.id);
+    let row = rows.get(inc.id);
+    if (!row) {
+      row = buildRow(inc);
+      rows.set(inc.id, row);
+    }
+    updateRow(row, inc, now, alerting.has(inc.id));
+    if (container.children[i] !== row.root) container.insertBefore(row.root, container.children[i] ?? null);
+  });
+  for (const [id, row] of rows) {
+    if (!seen.has(id)) { row.root.remove(); rows.delete(id); }
+  }
+}
+
 // --- Page --------------------------------------------------------------------
 
 function render() {
   renderConnection();
+  renderAlert();
   if (state.lastOkAt === null) return; // nothing loaded yet
   renderTiles();
   renderWorkers();
+  renderIncidents();
 }
 
 loadZones();

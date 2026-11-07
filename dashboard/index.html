@@ -13,8 +13,25 @@
       <h1>WorkWear</h1>
       <span class="subtitle">Site safety dashboard</span>
     </div>
-    <div id="conn" class="conn conn--wait" role="status" aria-live="polite">Connecting…</div>
+    <div class="topbar__right">
+      <button id="sound" class="btn btn--quiet" type="button" aria-pressed="false"
+              title="Play a sound when a new fall comes in">Alert sound: off</button>
+      <div id="conn" class="conn conn--wait" role="status" aria-live="polite">Connecting…</div>
+    </div>
   </header>
+
+  <div id="alert" class="alert" role="alert" hidden>
+    <div class="alert__body">
+      <div class="alert__title" id="alert-title"></div>
+      <div id="alert-detail"></div>
+      <div class="alert__badges" id="alert-badges"></div>
+      <div class="alert__more" id="alert-more"></div>
+    </div>
+    <div class="alert__actions">
+      <button id="alert-show" class="btn" type="button">Show in list</button>
+      <button id="alert-hide" class="btn" type="button">Hide alert</button>
+    </div>
+  </div>
 
   <section class="tiles" aria-label="Summary">
     <div class="tile"><span class="tile__value" id="t-online">–</span><span class="tile__label">Workers online</span></div>
@@ -37,7 +54,9 @@
 
     <section class="panel panel--incidents" aria-labelledby="h-incidents">
       <h2 id="h-incidents">Incidents</h2>
-      <div id="incidents" class="empty">No incidents yet.</div>
+      <p class="panel__note">Newest first. Falls come from helmets; injury and hazard reports are entered by hand.</p>
+      <div id="incidents-empty" class="empty">No incidents yet.</div>
+      <ol id="incidents" class="incidents" aria-label="Incidents, newest first" hidden></ol>
     </section>
   </main>
 

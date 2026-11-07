@@ -24,7 +24,9 @@ export function formatAgo(ms) {
   if (s < 60) return `${s} s ago`;
   const m = Math.floor(s / 60);
   if (m < 60) return `${m} min ago`;
-  return `${Math.floor(m / 60)} h ago`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h} h ago`;
+  return `${Math.floor(h / 24)} d ago`;
 }
 
 // --- Workers (D2) -----------------------------------------------------------
@@ -89,4 +91,71 @@ export function namePatch(typed, currentName) {
 export function zonePatch(selected, currentZone) {
   const zone = selected === "" ? null : selected;
   return zone === (currentZone ?? null) ? null : { zone };
+}
+
+// --- Incidents and fall alert (D3) -----------------------------------------
+
+const INCIDENT_TITLES = { fall: "Fall", injury_report: "Injury report", hazard_report: "Hazard report" };
+
+export function incidentTitle(type) {
+  return INCIDENT_TITLES[type] ?? type;
+}
+
+const STATUS_BADGES = {
+  new: { label: "New", css: "badge--new" },
+  confirmed: { label: "Confirmed", css: "badge--confirmed" },
+  dismissed: { label: "Dismissed", css: "badge--dismissed" },
+};
+
+// Badges for an incident row: status, then "Sample data" and "Arrived late" when they apply.
+export function incidentBadges(inc) {
+  const badges = [STATUS_BADGES[inc.status] ?? { label: inc.status, css: "badge--dismissed" }];
+  if (inc.sample) badges.push({ label: "Sample data", css: "badge--sample" });
+  if (inc.delayed) badges.push({ label: "Arrived late", css: "badge--late" });
+  return badges;
+}
+
+// Who it happened to. worker_name is the name when the incident was created; it equals
+// the device ID when the helmet was never renamed.
+export function incidentWho(inc) {
+  const name = inc.worker_name;
+  const dev = inc.device_id;
+  if (name && dev && name !== dev) return `${name} (${dev})`;
+  return name || dev || "Manual report";
+}
+
+export function incidentPlace(inc) {
+  const zone = inc.zone ? `Zone ${inc.zone}` : "No zone";
+  if (inc.lat == null || inc.lon == null) return zone;
+  return `${zone} · GPS ${inc.lat.toFixed(5)}, ${inc.lon.toFixed(5)}`;
+}
+
+// "15:04:06 (6 min ago)" for today, "5 Nov, 09:00:00 (30 h ago)" for older days.
+// opts.locale and opts.timeZone are for tests; the page uses the browser's settings.
+export function formatClock(ts, nowMs, opts = {}) {
+  const at = new Date(ts);
+  const { locale, timeZone } = opts;
+  const day = (d) => d.toLocaleDateString("en-CA", { timeZone }); // YYYY-MM-DD, for comparing
+  const time = at.toLocaleTimeString(locale, {
+    timeZone, hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const ago = formatAgo(nowMs - at.getTime());
+  if (day(at) === day(new Date(nowMs))) return `${time} (${ago})`;
+  const date = at.toLocaleDateString(locale, { timeZone, day: "numeric", month: "short" });
+  return `${date}, ${time} (${ago})`;
+}
+
+// Which falls should raise the alert banner. Incident IDs only go up, so `baseline` is the
+// highest ID already looked at. On the first load (baseline null) nothing alerts: falls that
+// happened before the page was opened are in the list but do not set off the alarm.
+// If the highest ID went down, the server's database was reset, so everything in the list is new.
+// Returns { baseline, falls } with falls newest first.
+export function checkNewFalls(incidents, baseline) {
+  const maxId = incidents.reduce((m, i) => Math.max(m, i.id), 0);
+  if (baseline === null) return { baseline: maxId, falls: [] };
+  const from = maxId < baseline ? 0 : baseline;
+  const falls = incidents
+    .filter((i) => i.id > from && i.type === "fall" && i.status === "new")
+    .sort((a, b) => b.id - a.id);
+  return { baseline: maxId, falls };
 }

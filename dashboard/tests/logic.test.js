@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  formatAgo, formatReading, heatInfo, isSimulated, lastSeenText, namePatch, summarize,
-  zoneOptions, zonePatch,
+  checkNewFalls, formatAgo, formatClock, formatReading, heatInfo, incidentBadges, incidentPlace,
+  incidentTitle, incidentWho, isSimulated, lastSeenText, namePatch, summarize, zoneOptions, zonePatch,
 } from "../logic.js";
 
 test("isSimulated only matches the sim- prefix", () => {
@@ -86,4 +86,80 @@ test("zonePatch sends null for no zone and nothing when unchanged", () => {
   assert.deepEqual(zonePatch("", "A2"), { zone: null });
   assert.equal(zonePatch("A2", "A2"), null);
   assert.equal(zonePatch("", null), null);
+});
+
+// --- Incidents and fall alert (D3) -----------------------------------------
+
+const inc = (over) => ({
+  id: 1, device_id: "helmet-01", worker_name: "Sam R.", type: "fall", ts: "2026-11-06T15:04:06.010Z",
+  zone: "A2", lat: null, lon: null, peak_g: 4.2, status: "new", notes: "", delayed: false, sample: false,
+  ...over,
+});
+
+test("formatAgo switches to days at 48 hours", () => {
+  assert.equal(formatAgo(47 * 3_600_000), "47 h ago");
+  assert.equal(formatAgo(50 * 3_600_000), "2 d ago");
+});
+
+test("incidentTitle names each type", () => {
+  assert.equal(incidentTitle("fall"), "Fall");
+  assert.equal(incidentTitle("injury_report"), "Injury report");
+  assert.equal(incidentTitle("hazard_report"), "Hazard report");
+  assert.equal(incidentTitle("other"), "other");
+});
+
+test("incidentBadges shows status, sample data, and late arrival", () => {
+  const labels = (i) => incidentBadges(i).map((b) => b.label);
+  assert.deepEqual(labels(inc()), ["New"]);
+  assert.deepEqual(labels(inc({ status: "confirmed", sample: true, delayed: true })),
+    ["Confirmed", "Sample data", "Arrived late"]);
+  assert.equal(incidentBadges(inc({ status: "dismissed" }))[0].css, "badge--dismissed");
+});
+
+test("incidentWho uses the snapshot name, the device, or says manual report", () => {
+  assert.equal(incidentWho(inc()), "Sam R. (helmet-01)");
+  assert.equal(incidentWho(inc({ worker_name: "helmet-01" })), "helmet-01");
+  assert.equal(incidentWho(inc({ worker_name: null })), "helmet-01");
+  assert.equal(incidentWho(inc({ worker_name: "Ana", device_id: null })), "Ana");
+  assert.equal(incidentWho(inc({ worker_name: null, device_id: null })), "Manual report");
+});
+
+test("incidentPlace shows the zone and GPS when present", () => {
+  assert.equal(incidentPlace(inc()), "Zone A2");
+  assert.equal(incidentPlace(inc({ zone: null })), "No zone");
+  assert.equal(incidentPlace(inc({ lat: 45.123456, lon: -122.5 })), "Zone A2 · GPS 45.12346, -122.50000");
+});
+
+test("formatClock shows time today and adds the date for older incidents", () => {
+  const opts = { locale: "en-GB", timeZone: "UTC" };
+  const now = Date.parse("2026-11-06T15:10:06.000Z");
+  assert.equal(formatClock("2026-11-06T15:04:06.010Z", now, opts), "15:04:06 (6 min ago)");
+  assert.equal(formatClock("2026-11-05T09:00:00.000Z", now, opts), "5 Nov, 09:00:00 (30 h ago)");
+});
+
+test("checkNewFalls: first load sets the baseline and alerts nothing", () => {
+  const list = [inc({ id: 7 }), inc({ id: 5 })];
+  assert.deepEqual(checkNewFalls(list, null), { baseline: 7, falls: [] });
+  assert.deepEqual(checkNewFalls([], null), { baseline: 0, falls: [] });
+});
+
+test("checkNewFalls: only new falls above the baseline, newest first", () => {
+  const list = [
+    inc({ id: 10 }),
+    inc({ id: 9, type: "injury_report", peak_g: null }),
+    inc({ id: 8, status: "dismissed" }),
+    inc({ id: 7 }),
+    inc({ id: 5 }),
+  ];
+  const r = checkNewFalls(list, 5);
+  assert.equal(r.baseline, 10);
+  assert.deepEqual(r.falls.map((f) => f.id), [10, 7]);
+  assert.deepEqual(checkNewFalls(list, 10), { baseline: 10, falls: [] });
+});
+
+test("checkNewFalls: a reset database (ids went down) alerts on its new falls", () => {
+  const r = checkNewFalls([inc({ id: 2 }), inc({ id: 1, type: "hazard_report" })], 40);
+  assert.equal(r.baseline, 2);
+  assert.deepEqual(r.falls.map((f) => f.id), [2]);
+  assert.deepEqual(checkNewFalls([], 40), { baseline: 0, falls: [] });
 });

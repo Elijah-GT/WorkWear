@@ -38,9 +38,26 @@ struct JsonOut {
   }
 
   int result() const { return ok ? (int)len : -1; }
+
+  // "zone":"1520-N", or "zone":null when there is no usable zone.
+  void zone(const char* z) {
+    if (zoneIdOk(z)) add("\"zone\":\"%s\"", z);
+    else add("\"zone\":null");
+  }
 };
 
 }  // namespace
+
+bool zoneIdOk(const char* zone) {
+  if (zone == nullptr || zone[0] == '\0') return false;
+  size_t n = 0;
+  for (const char* c = zone; *c; c++, n++) {
+    const bool ok = (*c >= 'A' && *c <= 'Z') || (*c >= 'a' && *c <= 'z') ||
+                    (*c >= '0' && *c <= '9') || *c == '.' || *c == '_' || *c == '-';
+    if (!ok || n >= ZONE_ID_MAX) return false;
+  }
+  return true;
+}
 
 int buildTelemetryJson(char* buf, size_t cap, const char* device_id, const Telemetry& t) {
   JsonOut o(buf, cap);
@@ -57,8 +74,10 @@ int buildTelemetryJson(char* buf, size_t cap, const char* device_id, const Telem
   o.num("accel_g", t.accel_g, 3);
   o.add(",");
   o.num("tilt_deg", t.tilt_deg, 1);
-  // zone is always null from firmware; the server fills it in (PROTOCOL.md section 1).
-  o.add(",\"zone\":null,\"gps_fix\":%s,", t.gps_fix ? "true" : "false");
+  // zone: null unless beacons located the helmet; the server then uses it (PROTOCOL.md section 1).
+  o.add(",");
+  o.zone(t.zone);
+  o.add(",\"gps_fix\":%s,", t.gps_fix ? "true" : "false");
   o.num("lat", t.gps_fix ? t.lat : NAN, 6);
   o.add(",");
   o.num("lon", t.gps_fix ? t.lon : NAN, 6);
@@ -74,6 +93,8 @@ int buildFallEventJson(char* buf, size_t cap, const char* device_id, const FallE
   o.num("peak_g", e.peak_g, 2);
   o.add(",\"freefall_ms\":%lu,", (unsigned long)e.freefall_ms);
   o.num("still_s", e.still_s, 2);
-  o.add(",\"zone\":null,\"sent_uptime_ms\":%lu}", (unsigned long)sent_uptime_ms);
+  o.add(",");
+  o.zone(e.zone);
+  o.add(",\"sent_uptime_ms\":%lu}", (unsigned long)sent_uptime_ms);
   return o.result();
 }

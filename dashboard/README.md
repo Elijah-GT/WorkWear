@@ -31,6 +31,8 @@ Three simulated helmets appear within a second. Every 30 s one of them "falls", 
 | **Tiles** | Workers online, new (unreviewed) incidents, recent incidents, simulated helmets. |
 | **Workers** | One card per helmet: name, online/offline (offline = nothing for 5 s), heat risk color and reading, helmet on/off, last seen. **Click the name to rename** (Enter saves, Esc cancels). **Pick a zone** from the list to say where the worker is. Both are saved on the server, and new incidents use the name and zone at that moment. |
 | **Site map** | The floor plan of room 1520 (from `zones.json`) with its zones drawn on it. A dot per worker in their zone, colored by heat risk. Workers without a zone are listed under "Not on the map". |
+| **Fall dots** | Every fall that isn't dismissed is a red dot on the plan (Incidents layer; the **Time** filter applies). Bright = not reviewed, dark = confirmed; a new fall's dot pulses. With a GPS position (and `gps_points` set up, section 4) the dot is at that spot. Otherwise it sits at a fixed spot inside the zone the fall was recorded in, with a **dashed ring meaning "approximate"**. Hover for who, when, and how sure; click to jump to it in the list. |
+| **Located workers** | Workers whose helmet located itself (BLE beacons or GPS) have a **blue ring**, and their card says "Located in ... by beacons". The map tag then reads "Location: measured where marked" instead of "Simulated location". Otherwise the zone picked on the card is used. |
 | **New fall on the map** | The zone gets a thick **pulsing red outline** and a **NEW FALL** tag, and the worker's dot pulses. This is never a fill, so a live fall can't be mistaken for a past hazard. It lasts until the alert is hidden or the fall is confirmed or dismissed. |
 | **Map layers** | **Incidents** fills each zone **red** by its number of **confirmed** incidents (light, medium, dark = 1, 2, 3 or more) with a count tag. Confirming a fall turns its zone's outline into a red fill. **Heat** tints each zone in the heat-risk color of the highest heat index measured there. **Time** limits both to the last 24 h, 8 h, or hour. Hover a zone for the full text. |
 | **Incidents** | Newest first, with badges: New / Confirmed / Dismissed, Sample data, Arrived late. **Confirm** a real incident, **Dismiss** a false alarm, or **Mark new** to undo. Add or edit a note on any incident. Confirming or dismissing a fall also clears its alert. |
@@ -75,6 +77,27 @@ Edit [`zones.json`](zones.json). It points at a floor-plan image and draws each 
 - No floor plan? Leave out `image`, `width`, and `height` and use a grid instead: `"cols": 3, "rows": 2`, and give each zone a `"col"` and `"row"` (from 0, top left).
 - Mistakes (duplicate IDs, a zone outside the image or grid, a missing image) are skipped and listed above the map. Reload the page after editing.
 - If you rename or remove an `id`, workers already set to the old one show under "Not on the map" until you pick a new zone. Their past incidents keep the old zone.
+
+### Put GPS positions on the plan (outdoors)
+
+Off until you add `gps_points`: three or more spots you can find both on the plan and on a map. Building corners work well.
+
+1. Open the dashboard as `http://localhost:8000/?calibrate` and click each spot on the floor plan. The page shows its `x` and `y` in image pixels.
+2. For each spot, get its latitude and longitude, for example by right-clicking it in Google Maps.
+3. Add them to `zones.json` (spots far apart, not in a line):
+
+   ```json
+   "gps_points": [
+     { "x": 14,  "y": 20,  "lat": 41.00000, "lon": -96.00000 },
+     { "x": 552, "y": 20,  "lat": 41.00000, "lon": -96.00000 },
+     { "x": 14,  "y": 489, "lat": 41.00000, "lon": -96.00000 }
+   ]
+   ```
+
+   (The numbers above are placeholders: use your own.)
+4. Reload the page. The server reads the file on its own; `http://localhost:8000/api/site` should say `"gps_ready": true`, and `max_error_px` should be small (a few pixels). A big error means a point was measured wrong.
+
+Falls with a GPS fix then appear at their position, and a GPS fix inside a zone sets the worker's zone. **Indoors the GPS gets no fix**, so inside room 1520 this changes nothing; use beacons for that (`firmware/README.md`).
 
 ## 5. Run the tests
 

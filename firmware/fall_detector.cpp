@@ -88,6 +88,7 @@ FallResult FallDetector::update(const FallSample& s, FallEvent* event) {
             event->peak_g = peak_g_;
             event->freefall_ms = freefall_ms_;
             event->still_s = (t - still_start_) / 1000.0f;
+            event->zone[0] = '\0';  // the detector does not know the zone; firmware.ino adds it
           }
           if (!worn_at_start_) {
             state_ = FallState::IDLE;

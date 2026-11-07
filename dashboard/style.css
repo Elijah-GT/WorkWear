@@ -340,7 +340,35 @@ h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap
   .zone.zone--fall { animation: none; box-shadow: 0 0 0 4px rgb(179 38 30 / 0.45); }
 }
 
+/* Fall dots on the floor plan. Solid = at its GPS position; dashed ring = approximate (a steady
+   spot inside the zone it was recorded in). Bright = not reviewed, dark = confirmed. */
+.map__markers { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.map__markers[hidden] { display: none; }
+.marker {
+  position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; padding: 0;
+  border-radius: 50%; border: 2px solid #fff; cursor: pointer; pointer-events: auto;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+}
+.marker:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.marker--new { background: #e53935; }
+.marker--confirmed { background: #7a0d0d; }
+.marker--approx { outline: 2px dashed var(--bad); outline-offset: 2px; }
+.marker--alert { animation: marker-pulse 1.2s ease-in-out infinite; }
+@keyframes marker-pulse { 50% { transform: scale(1.35); } }
+@media (prefers-reduced-motion: reduce) { .marker--alert { animation: none; } }
+@media (max-width: 500px) { .marker { width: 12px; height: 12px; margin: -6px 0 0 -6px; } }
+.map__calibrate { font-size: 0.9rem; background: var(--warn-bg); border-radius: 8px; padding: 6px 10px; }
+
+/* Workers located by beacons or GPS (not just set by hand) */
+.dot--measured { box-shadow: 0 0 0 2px var(--accent); }
+.worker__located { font-size: 0.85rem; color: var(--accent); }
+.worker__located:empty { display: none; }
+.tag--measured { background: #e3ecfa; color: #174a95; }
+
 /* Map key */
+.legend__marker { position: relative; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; display: inline-block; flex: none; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.3); }
+.legend__marker.marker--approx { outline: 2px dashed var(--bad); outline-offset: 2px; margin: 0 3px; }
+.legend__located { width: 18px; height: 18px; border-radius: 50%; display: inline-block; flex: none; box-shadow: 0 0 0 2px var(--accent); background: var(--panel); }
 .legend[hidden] { display: none; }
 .legend__title { font-weight: 700; color: var(--text); }
 .legend__zone { width: 24px; height: 14px; border-radius: 3px; display: inline-block; flex: none; }

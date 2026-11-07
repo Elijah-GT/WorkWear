@@ -5,5 +5,6 @@ set -euo pipefail
 cd "$(dirname "$0")"
 out="$(mktemp -d)/firmware_tests"
 g++ -std=c++17 -Wall -Wextra -Werror -O1 -o "$out" \
-  test_logic.cpp ../fall_detector.cpp ../heat_index.cpp ../payload.cpp ../event_queue.cpp -lm
+  test_logic.cpp ../fall_detector.cpp ../heat_index.cpp ../payload.cpp ../event_queue.cpp \
+  ../zone_tracker.cpp -lm
 "$out"

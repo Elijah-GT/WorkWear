@@ -19,8 +19,8 @@ def test_incident_shape(client):
     make_falls(client, 1)
     [inc] = client.get("/api/incidents").json()
     assert set(inc) == {
-        "id", "device_id", "worker_name", "type", "ts", "zone", "lat", "lon",
-        "peak_g", "status", "notes", "delayed", "sample",
+        "id", "device_id", "worker_name", "type", "ts", "zone", "zone_source", "lat", "lon",
+        "plan_x", "plan_y", "peak_g", "status", "notes", "delayed", "sample",
     }
 
 

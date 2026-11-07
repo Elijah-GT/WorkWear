@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS telemetry (
     accel_g       REAL,
     tilt_deg      REAL,
     zone          TEXT,
+    zone_source   TEXT,  -- 'beacon', 'gps', or 'manual' (see main.resolve_zone)
     gps_fix       INTEGER NOT NULL,
     lat           REAL,
     lon           REAL
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     type         TEXT NOT NULL CHECK (type IN ('fall', 'injury_report', 'hazard_report')),
     ts           TEXT NOT NULL,
     zone         TEXT,
+    zone_source  TEXT,  -- 'beacon', 'gps', or 'manual'
     lat          REAL,
     lon          REAL,
     peak_g       REAL,
@@ -107,6 +109,23 @@ def connect(path: Path) -> sqlite3.Connection:
     return conn
 
 
+# Columns added after the first version. init_db adds them to an older database file.
+ADDED_COLUMNS = [
+    ("telemetry", "zone_source", "TEXT"),
+    ("incidents", "zone_source", "TEXT"),
+]
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    for table, column, kind in ADDED_COLUMNS:
+        have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in have:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+            if column == "zone_source":
+                # Before this column existed, every zone was set by hand on the dashboard.
+                conn.execute(f"UPDATE {table} SET zone_source = 'manual' WHERE zone IS NOT NULL")
+
+
 def init_db(path: Path) -> None:
     """Create the database file and tables if missing. Safe to run every startup."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -115,6 +134,7 @@ def init_db(path: Path) -> None:
         # WAL lets the dashboard read while helmets write.
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA)
+        _add_missing_columns(conn)
         conn.commit()
     finally:
         conn.close()
@@ -153,13 +173,14 @@ def update_device(conn: sqlite3.Connection, device_id: str, fields: dict) -> Non
     )
 
 
-def insert_telemetry(conn: sqlite3.Connection, t: dict, ts: str, zone: str | None) -> None:
+def insert_telemetry(conn: sqlite3.Connection, t: dict, ts: str, zone: str | None,
+                     zone_source: str | None) -> None:
     conn.execute(
         """INSERT INTO telemetry (device_id, ts, uptime_ms, worn, temp_c, humidity_pct,
-               pressure_hpa, heat_index_c, accel_g, tilt_deg, zone, gps_fix, lat, lon)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               pressure_hpa, heat_index_c, accel_g, tilt_deg, zone, zone_source, gps_fix, lat, lon)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (t["device_id"], ts, t["uptime_ms"], t["worn"], t["temp_c"], t["humidity_pct"],
-         t["pressure_hpa"], t["heat_index_c"], t["accel_g"], t["tilt_deg"], zone,
+         t["pressure_hpa"], t["heat_index_c"], t["accel_g"], t["tilt_deg"], zone, zone_source,
          t["gps_fix"], t["lat"], t["lon"]),
     )
     conn.execute("UPDATE devices SET last_seen = ? WHERE device_id = ?", (ts, t["device_id"]))
@@ -179,9 +200,9 @@ def find_event(conn: sqlite3.Connection, device_id: str, uptime_ms: int) -> sqli
 
 def insert_incident(conn: sqlite3.Connection, inc: dict) -> int:
     cur = conn.execute(
-        """INSERT INTO incidents (device_id, worker_name, type, ts, zone, lat, lon,
+        """INSERT INTO incidents (device_id, worker_name, type, ts, zone, zone_source, lat, lon,
                peak_g, status, notes, delayed, sample)
-           VALUES (:device_id, :worker_name, :type, :ts, :zone, :lat, :lon,
+           VALUES (:device_id, :worker_name, :type, :ts, :zone, :zone_source, :lat, :lon,
                :peak_g, :status, :notes, :delayed, :sample)""",
         inc,
     )

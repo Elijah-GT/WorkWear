@@ -131,8 +131,31 @@ export function zoneName(zonesConfig, id) {
   return typeof z?.label === "string" && z.label ? z.label : id;
 }
 
+// --- Location: beacons, GPS, or set by hand (2026-11-07) -----------------------
+// The server says where each zone came from (zone_source): "beacon" (the helmet located itself
+// with BLE beacons), "gps" (its GPS fix is inside a zone), or "manual" (set on a worker card).
+
+const MEASURED = new Set(["beacon", "gps"]);
+const SOURCE_TEXT = { beacon: "beacons", gps: "GPS", manual: "set by hand" };
+
+export function isMeasured(source) {
+  return MEASURED.has(source);
+}
+
+export function zoneSourceText(source) {
+  return SOURCE_TEXT[source] ?? SOURCE_TEXT.manual; // older data has no source: it was by hand
+}
+
+// Where to put a worker: a zone the helmet measured wins over the one set by hand.
+export function workerZone(device) {
+  const l = device.latest;
+  if (l && isMeasured(l.zone_source) && l.zone) return { zone: l.zone, source: l.zone_source };
+  return { zone: device.zone ?? null, source: device.zone ? "manual" : null };
+}
+
 export function incidentPlace(inc, zonesConfig = null) {
-  const zone = inc.zone ? `Zone ${zoneName(zonesConfig, inc.zone)}` : "No zone";
+  const how = isMeasured(inc.zone_source) ? ` (${zoneSourceText(inc.zone_source)})` : "";
+  const zone = inc.zone ? `Zone ${zoneName(zonesConfig, inc.zone)}${how}` : "No zone";
   if (inc.lat == null || inc.lon == null) return zone;
   return `${zone} · GPS ${inc.lat.toFixed(5)}, ${inc.lon.toFixed(5)}`;
 }
@@ -215,7 +238,8 @@ export function mapLayout(zonesConfig, devices) {
   }
   const offMap = [];
   for (const d of devices) {
-    const cell = d.zone ? byId.get(d.zone) : undefined;
+    const { zone } = workerZone(d);
+    const cell = zone ? byId.get(zone) : undefined;
     (cell ? cell.workers : offMap).push(d);
   }
   for (const c of cells) c.workers.sort(byName);
@@ -232,9 +256,60 @@ export function dotLabel(device) {
   const info = heatInfo(level);
   const parts = [level ? `${info.label} heat risk` : info.label];
   if (!device.online) parts.push("offline");
+  const where = workerZone(device);
+  if (isMeasured(where.source)) parts.push(`located by ${zoneSourceText(where.source)}`);
   const l = device.latest;
   if (l?.gps_fix && l.lat != null && l.lon != null) parts.push(`GPS ${l.lat.toFixed(5)}, ${l.lon.toFixed(5)}`);
   return `${device.name}: ${parts.join(", ")}`;
+}
+
+// --- Fall markers on the floor plan (2026-11-07) -------------------------------
+
+// A steady spot inside a zone for an incident (fractions of the zone's width and height), so
+// its dot does not jump on every refresh. Kept to the lower part of the zone, because the
+// zone's label and worker names sit at the top.
+export function zoneSpot(id) {
+  const a = (Math.imul(id, 2654435761) >>> 0) / 2 ** 32;
+  const b = (Math.imul(id ^ 0x5bd1e995, 0x27d4eb2d) >>> 0) / 2 ** 32;
+  return [Math.round((0.15 + 0.7 * a) * 1000) / 1000, Math.round((0.5 + 0.38 * b) * 1000) / 1000];
+}
+
+// Red dots for falls on the floor plan. A fall whose GPS position is on the plan (plan_x and
+// plan_y, worked out by the server from zones.json gps_points) is drawn exactly there. Any
+// other fall is drawn at a steady spot inside the zone it was recorded in, marked approximate.
+// Dismissed falls, falls outside the time window, and falls with no place are left out.
+// Returns markers oldest first, so newer ones are drawn on top.
+export function fallMarkers(incidents, layout, { nowMs = Date.now(), hours = null } = {}) {
+  if (layout?.mode !== "plan") return [];
+  const cells = new Map(layout.cells.map((c) => [c.id, c]));
+  const since = hours ? nowMs - hours * 3600 * 1000 : null;
+  const out = [];
+  for (const inc of incidents) {
+    if (inc.type !== "fall" || inc.status === "dismissed") continue;
+    if (since !== null && Date.parse(inc.ts) < since) continue;
+    const base = { id: inc.id, status: inc.status, zone: inc.zone ?? null };
+    const onPlan = isNum(inc.plan_x) && isNum(inc.plan_y)
+      && inc.plan_x >= 0 && inc.plan_x <= layout.width && inc.plan_y >= 0 && inc.plan_y <= layout.height;
+    if (onPlan) {
+      out.push({ ...base, exact: true, source: "gps",
+        left: pct(inc.plan_x, layout.width), top: pct(inc.plan_y, layout.height) });
+      continue;
+    }
+    const cell = inc.zone ? cells.get(inc.zone) : undefined;
+    if (!cell) continue;
+    const [u, v] = zoneSpot(inc.id);
+    out.push({ ...base, exact: false, source: inc.zone_source ?? "manual",
+      left: Math.round((cell.left + cell.width * u) * 1000) / 1000,
+      top: Math.round((cell.top + cell.height * v) * 1000) / 1000 });
+  }
+  return out.sort((a, b) => a.id - b.id);
+}
+
+// Tooltip text for a fall marker: where the dot is and how sure we are.
+export function markerWhere(marker, zonesConfig) {
+  if (marker.exact) return "at its GPS position";
+  const zone = zoneName(zonesConfig, marker.zone);
+  return `approximate: somewhere in ${zone} (zone ${marker.source === "manual" ? "set by hand" : `from ${zoneSourceText(marker.source)}`})`;
 }
 
 // --- Stretch: review, reports, hazard map (D5) --------------------------------

@@ -17,6 +17,8 @@ Reads the BNO085 (motion), BME280 (temperature, humidity, pressure), NEO-6M GPS 
 | `event_queue.*` | Holds fall events until the server confirms them |
 | `sensors.*` | BNO085, BME280, GPS and worn-sensor drivers |
 | `net.*` | Wi-Fi and HTTP on a separate task, so a slow server never pauses fall detection |
+| `beacons.*`, `zone_tracker.*` | Optional BLE zone beacons: scanning, and picking the zone (tracker tested on a laptop) |
+| `beacon/beacon.ino` | Separate sketch for the zone beacons themselves |
 | `test/` | Laptop tests for the pure logic |
 
 ## Set up the Arduino IDE (once)
@@ -92,6 +94,19 @@ Lines starting with `#` are status messages; drop them before analysis. Save cap
 
 Fall events go out at once. If that fails, the helmet retries every 2 s (up to 8 events in RAM, lost on reboot). The server ignores repeats.
 
+## Indoor location with BLE beacons (optional)
+
+GPS gets no fix indoors. To have the helmet measure which zone it is in, put one small Bluetooth beacon in each zone. The helmet reports the zone of the strongest one, and the server then uses it instead of the zone picked on the dashboard (`docs/PROTOCOL.md` section 3). **Off by default** (`HAS_BLE_BEACONS 0`): the team decides whether it goes in the demo.
+
+1. **Beacons:** one spare ESP32 per zone (about $5 each). Open `firmware/beacon/beacon.ino`, set `BEACON_ZONE` to the zone's id from `dashboard/zones.json` (`1520-W`, `1520-N`, ...), and upload. Power it from any USB charger or power bank. Place it in the middle of its zone, up high, away from metal.
+2. **Helmet:** in `config.h` set `HAS_BLE_BEACONS 1`. In the Arduino IDE pick **Tools > Partition Scheme > Huge APP (3MB No OTA/1MB SPIFFS)**. With Bluetooth the program is about 1.8 MB, too big for the default 1.3 MB space; the compile says "Sketch too big" if you forget.
+3. Upload and watch the Serial Monitor: `# beacon zone: 1520-N` appears and changes as you walk between zones. The status line shows `zone ...`.
+4. On the dashboard the worker gets a blue "located" ring, and falls are filed in the measured zone.
+
+**Tuning** (`config.h`): the helmet only moves to a new zone when its beacon is `BEACON_SWITCH_DB` (6 dB) stronger for `BEACON_SWITCH_SCANS` (2) scans in a row, which stops flicker at zone edges. `BEACON_MIN_RSSI` ignores beacons that are far away. If no beacon is heard for a few seconds, the zone goes back to "unknown" and the server uses the dashboard zone.
+
+**What to expect:** room-level, not exact. Signal strength moves around with bodies, walls, and which way the helmet faces, so zones next to each other in one open room (1520 West/North/South) will sometimes swap near their edges. Separate rooms (1522, 1533) work better. Wi-Fi and Bluetooth share the ESP32's radio; keep Wi-Fi modem sleep on (the default). **Not yet tried on hardware.**
+
 ## Tests (no ESP32 needed)
 
 ```
@@ -99,7 +114,7 @@ bash firmware/test/run_tests.sh          # Linux / macOS / WSL with g++
 wsl bash firmware/test/run_tests.sh      # from Windows
 ```
 
-28 tests: the fall state machine on made-up acceleration traces, heat index against the simulator's values, exact JSON output, and the retry queue. Passing them does **not** mean the thresholds are right; that needs real drop and normal-activity data (acceptance tests A2 and A3).
+38 tests: the fall state machine on made-up acceleration traces, heat index against the simulator's values, exact JSON output, the retry queue, and the beacon zone tracker. Passing them does **not** mean the thresholds are right; that needs real drop and normal-activity data (acceptance tests A2 and A3).
 
 ## Troubleshooting
 

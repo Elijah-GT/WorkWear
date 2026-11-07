@@ -28,7 +28,8 @@ Framing for outsiders: we are student researchers exploring whether wearable fal
 - Navigation lights (LEDs on the helmet that point toward a fallen worker) are **later**.
 - The hazard-zone map (red markers where falls or injuries happened) is a **stretch goal**, built only after the basic incident list works.
 - Server: **Python FastAPI + SQLite** (built-in `sqlite3`). Decided 2026-11-06.
-- Indoor zone: **set per device on the dashboard** by the supervisor. The server stamps that zone on each telemetry message and event it receives. Firmware does not know its zone. The UI labels the zone as simulated. Decided 2026-11-06.
+- Indoor zone: **set per device on the dashboard** by the supervisor. The server stamps that zone on each telemetry message and event it receives. The UI labels the zone as simulated. Decided 2026-11-06.
+- **Measured location beats the dashboard zone** (decided by Elijah 2026-11-07). The server uses, in order: a zone the helmet reports itself from BLE zone beacons (firmware `HAS_BLE_BEACONS 1`, off by default), then the zone its GPS fix falls in (needs `gps_points` in `dashboard/zones.json`), then the dashboard zone. Each zone records its source (`zone_source`), and the UI marks measured locations. Falls show as red dots on the floor plan: at the GPS position when there is one, otherwise at an approximate spot in their zone, labeled approximate.
 - Worker names: incidents store a **snapshot** of the device's name at the time the incident is created, so history stays correct if a helmet is reassigned. Decided 2026-11-06.
 - Worn sensor: **attempt it, with a fallback**. If the sensor is cut or not working, firmware always sends `worn: true` (config flag `HAS_WORN_SENSOR 0`), and acceptance test A6 becomes a stretch test. Say so in the pitch. Decided 2026-11-06.
 
@@ -76,7 +77,7 @@ Event, sent immediately, `POST /api/event`:
  "peak_g":4.2,"freefall_ms":220,"still_s":2.1,"zone":null}
 ```
 
-Rules: the ESP32 has no real-time clock, so the **server stamps time on receipt**. Firmware sends `zone: null`; the server fills in the zone assigned to that device on the dashboard (`PATCH /api/devices/{id}` with `name` and `zone`). The field stays in the payload so a future firmware could report a zone itself. Never change a field name or type without updating `docs/PROTOCOL.md`, the firmware, the server, and the dashboard in the same change. The dashboard assigns human names to `device_id`s.
+Rules: the ESP32 has no real-time clock, so the **server stamps time on receipt**. Firmware sends `zone: null` unless BLE beacons give it a zone; the server otherwise uses the zone its GPS fix is in, or the zone assigned to that device on the dashboard (`PATCH /api/devices/{id}` with `name` and `zone`). Never change a field name or type without updating `docs/PROTOCOL.md`, the firmware, the server, and the dashboard in the same change. The dashboard assigns human names to `device_id`s.
 
 ## Hazard map (stretch goal)
 

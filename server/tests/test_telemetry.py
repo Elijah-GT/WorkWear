@@ -32,12 +32,16 @@ def test_telemetry_is_stamped_with_assigned_zone_and_server_time(client, db_file
     assert row["ts"].endswith("Z")
 
 
-def test_helmet_cannot_set_its_own_zone(client, db_file):
-    client.post("/api/telemetry", json=telemetry(zone="Z9"))
+def test_helmet_zone_from_beacons_beats_the_dashboard_zone(client, db_file):
+    # Changed 2026-11-07: a helmet that locates itself (beacons) reports its zone, and a
+    # measured zone wins over one set by hand. More cases in test_location.py.
+    client.post("/api/telemetry", json=telemetry())
+    client.patch("/api/devices/helmet-01", json={"zone": "A2"})
+    client.post("/api/telemetry", json=telemetry(uptime_ms=124456, zone="Z9"))
     conn = db.connect(db_file)
-    row = conn.execute("SELECT zone FROM telemetry").fetchone()
+    row = conn.execute("SELECT zone, zone_source FROM telemetry ORDER BY id DESC LIMIT 1").fetchone()
     conn.close()
-    assert row["zone"] is None
+    assert (row["zone"], row["zone_source"]) == ("Z9", "beacon")
 
 
 def test_lat_lon_dropped_without_gps_fix(client):

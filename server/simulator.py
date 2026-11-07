@@ -8,6 +8,12 @@ so the server marks their incidents as sample data.
 Standard library only. Examples:
     python simulator.py --devices 3 --fall-every 30
     python simulator.py --url http://192.168.43.10:8000 --heat-ramp 2 --resend
+    python simulator.py --beacon-zones 1520-N,1520-S,1520-W --fall-every 30
+    python simulator.py --gps 41.2565,-95.9345,40
+
+--beacon-zones makes each helmet report its own zone, as helmets with BLE beacons do, and
+wander between those zones. --gps gives each helmet a GPS fix that drifts within RADIUS
+metres of LAT,LON. Both are pretend locations from simulated helmets (sample data).
 """
 
 import argparse
@@ -22,6 +28,9 @@ import urllib.request
 RETRY_EVERY_S = 2         # PROTOCOL.md 2.2: failed falls are retried every 2 s
 STILL_AFTER_FALL_S = 5    # after a fall the helmet lies still and tilted for a while
 MAX_TEMP_C = 50.0         # --heat-ramp stops here
+ZONE_STAY_S = (20, 40)    # --beacon-zones: a helmet stays this long (random) before moving on
+WALK_M_PER_S = 0.7        # --gps: how far a helmet drifts each second
+M_PER_DEG_LAT = 111_320.0
 
 
 def heat_index_c(temp_c: float, humidity_pct: float) -> float:
@@ -51,6 +60,9 @@ class Helmet:
         self.humidity_pct = rng.uniform(35.0, 60.0)
         self.pressure_hpa = rng.uniform(1005.0, 1015.0)
         self.fallen_at = None  # sim time of the last fall
+        self.zone = None       # --beacon-zones: the zone it reports
+        self.move_at = 0.0     # --beacon-zones: when it moves to another zone
+        self.east_m = self.north_m = 0.0  # --gps: offset from the centre point
 
     def uptime_ms(self, t: float) -> int:
         return self.uptime_offset_ms + int(t * 1000)
@@ -64,7 +76,7 @@ class Simulator:
     """
 
     def __init__(self, devices=3, fall_every=0.0, heat_ramp=0.0, resend=False,
-                 post=None, rng=None, log=print):
+                 post=None, rng=None, log=print, beacon_zones=None, gps=None):
         self.rng = rng or random.Random()
         self.helmets = [Helmet(f"sim-{i:02d}", self.rng) for i in range(1, devices + 1)]
         self.fall_every = fall_every
@@ -74,16 +86,47 @@ class Simulator:
         self.post = post
         self.log = log
         self.pending = []  # falls not yet accepted: dicts with helmet, event, retry_at
+        self.beacon_zones = list(beacon_zones or [])
+        self.gps = gps  # (lat, lon, radius_m) or None
+        for h in self.helmets:
+            if self.beacon_zones:
+                h.zone = self.rng.choice(self.beacon_zones)
+                h.move_at = self.rng.uniform(*ZONE_STAY_S)
+
+    def lying_still(self, h: Helmet, t: float) -> bool:
+        return h.fallen_at is not None and t - h.fallen_at < STILL_AFTER_FALL_S
+
+    def move(self, h: Helmet, t: float) -> None:
+        """One second of walking: change beacon zone now and then, drift the GPS position."""
+        if self.lying_still(h, t):
+            return
+        r = self.rng
+        if len(self.beacon_zones) > 1 and t >= h.move_at:
+            h.zone = r.choice([z for z in self.beacon_zones if z != h.zone])
+            h.move_at = t + r.uniform(*ZONE_STAY_S)
+        if self.gps:
+            radius = self.gps[2]
+            h.east_m += r.gauss(0, WALK_M_PER_S)
+            h.north_m += r.gauss(0, WALK_M_PER_S)
+            dist = math.hypot(h.east_m, h.north_m)
+            if dist > radius:  # stay inside the circle
+                h.east_m, h.north_m = h.east_m * radius / dist, h.north_m * radius / dist
+
+    def position(self, h: Helmet) -> tuple[float, float]:
+        lat0, lon0, _ = self.gps
+        lat = lat0 + h.north_m / M_PER_DEG_LAT
+        lon = lon0 + h.east_m / (M_PER_DEG_LAT * math.cos(math.radians(lat0)))
+        return round(lat, 7), round(lon, 7)
 
     def telemetry(self, h: Helmet, t: float) -> dict:
         r = self.rng
         temp = min(h.base_temp_c + self.heat_ramp * t / 60 + r.gauss(0, 0.15), MAX_TEMP_C)
         hum = min(max(h.humidity_pct + r.gauss(0, 0.5), 0.0), 100.0)
-        lying_still = h.fallen_at is not None and t - h.fallen_at < STILL_AFTER_FALL_S
-        if lying_still:
+        if self.lying_still(h, t):
             accel, tilt = 1.0 + r.gauss(0, 0.01), r.uniform(80, 100)
         else:
             accel, tilt = 1.0 + r.gauss(0, 0.06), r.uniform(0, 25)
+        lat, lon = self.position(h) if self.gps else (None, None)
         return {
             "device_id": h.device_id,
             "uptime_ms": h.uptime_ms(t),
@@ -94,14 +137,15 @@ class Simulator:
             "heat_index_c": round(heat_index_c(temp, hum), 1),
             "accel_g": round(accel, 2),
             "tilt_deg": round(tilt, 1),
-            "zone": None,
-            "gps_fix": False,
-            "lat": None,
-            "lon": None,
+            "zone": h.zone,
+            "gps_fix": self.gps is not None,
+            "lat": lat,
+            "lon": lon,
         }
 
     def tick(self, t: float) -> None:
         for h in self.helmets:
+            self.move(h, t)
             self.post("/api/telemetry", self.telemetry(h, t))  # dropped on failure, like the helmet
         if self.next_fall is not None and t >= self.next_fall:
             self.fall(self.rng.choice(self.helmets), t)
@@ -119,7 +163,7 @@ class Simulator:
             "peak_g": round(r.uniform(3.0, 8.0), 1),
             "freefall_ms": r.randint(150, 350),
             "still_s": round(r.uniform(2.0, 3.0), 1),
-            "zone": None,
+            "zone": h.zone,  # where it fell, when it locates itself with beacons
             "sent_uptime_ms": uptime,
         }
         reply = self.post("/api/event", event)
@@ -200,16 +244,37 @@ def main(argv=None) -> int:
                    help="send every fall twice, to check the server does not duplicate it")
     p.add_argument("--duration", type=float, default=0, metavar="S", help="stop after S seconds (default: run until Ctrl+C)")
     p.add_argument("--seed", type=int, help="random seed, for repeatable runs")
+    p.add_argument("--beacon-zones", metavar="Z1,Z2,...",
+                   help="helmets report their own zone (as with BLE beacons), moving between these zones")
+    p.add_argument("--gps", metavar="LAT,LON[,RADIUS_M]",
+                   help="helmets have a GPS fix drifting within RADIUS_M (default 30) metres of LAT,LON")
     args = p.parse_args(argv)
     if not 1 <= args.devices <= 99:
         p.error("--devices must be 1-99")
+    zones = [z.strip() for z in (args.beacon_zones or "").split(",") if z.strip()]
+    if any(len(z) > 32 for z in zones):
+        p.error("--beacon-zones: zone IDs are at most 32 characters")
+    gps = None
+    if args.gps:
+        try:
+            parts = [float(x) for x in args.gps.split(",")]
+        except ValueError:
+            p.error("--gps must be LAT,LON or LAT,LON,RADIUS_M")
+        if len(parts) not in (2, 3) or not (-90 <= parts[0] <= 90 and -180 <= parts[1] <= 180):
+            p.error("--gps must be LAT,LON or LAT,LON,RADIUS_M with a valid position")
+        gps = (parts[0], parts[1], parts[2] if len(parts) == 3 else 30.0)
 
     sim = Simulator(
         devices=args.devices, fall_every=args.fall_every, heat_ramp=args.heat_ramp,
         resend=args.resend, post=http_poster(args.url), rng=random.Random(args.seed),
+        beacon_zones=zones, gps=gps,
     )
     ids = ", ".join(h.device_id for h in sim.helmets)
     print(f"Simulating {ids} -> {args.url}. Their incidents are marked sample data. Ctrl+C to stop.")
+    if zones:
+        print(f"Helmets report their own zone (pretend beacons), moving between {', '.join(zones)}.")
+    if gps:
+        print(f"Helmets have a pretend GPS fix within {gps[2]:.0f} m of {gps[0]}, {gps[1]}.")
 
     start = time.monotonic()
     ticks = 0

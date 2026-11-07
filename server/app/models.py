@@ -23,7 +23,7 @@ class Telemetry(BaseModel):
     heat_index_c: float | None = None
     accel_g: float | None = None
     tilt_deg: float | None = None
-    zone: str | None = None  # always null from firmware; the server sets it
+    zone: str | None = None  # null, or the helmet's own zone from beacons (main.resolve_zone)
     gps_fix: bool
     lat: float | None = None
     lon: float | None = None
@@ -40,7 +40,7 @@ class FallEvent(BaseModel):
     peak_g: float
     freefall_ms: int = Field(ge=0)
     still_s: float = Field(ge=0)
-    zone: str | None = None  # always null from firmware; the server sets it
+    zone: str | None = None  # null, or where the helmet was when it fell (beacons)
     sent_uptime_ms: int | None = Field(default=None, ge=0)
 
 

@@ -47,6 +47,7 @@ struct FallEvent {
   float peak_g;
   uint32_t freefall_ms;
   float still_s;
+  char zone[ZONE_ID_MAX + 1];  // where the helmet was (beacons); "" = unknown. Set by the caller.
 };
 
 enum class FallState : uint8_t { IDLE, FREEFALL, IMPACT, STILL, ALERT };

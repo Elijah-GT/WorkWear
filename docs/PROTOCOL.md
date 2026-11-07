@@ -11,7 +11,7 @@ This file is the single source of truth for every message between the helmet, th
 - Units are in the field names: `_c` = degrees Celsius, `_pct` = percent, `_hpa` = hectopascals, `_g` = multiples of gravity, `_deg` = degrees, `_ms` = milliseconds, `_s` = seconds.
 - Missing or failed readings are sent as `null`, never as `0` or `-999`.
 - **Time:** the ESP32 has no real-time clock. It sends `uptime_ms` (milliseconds since boot) only. The server stamps every message on receipt as `ts`, an ISO 8601 UTC string, for example `"2026-11-06T15:04:05.123Z"`.
-- **Zone:** firmware always sends `"zone": null`. The server replaces it with the zone assigned to that device on the dashboard (section 4). The field stays in the payload so later firmware could report its own zone.
+- **Zone:** firmware sends `"zone": null`, unless it locates itself with BLE zone beacons (`HAS_BLE_BEACONS 1` in `firmware/config.h`); then it sends the zone id of the strongest beacon. The server picks each message's zone in this order (section 3): the helmet's own zone, then the zone its GPS fix is in, then the zone assigned on the dashboard (section 4). It records which one it used as `zone_source`.
 - **Device IDs:** `helmet-01`, `helmet-02`, and so on, set in `firmware/config.h`. The server creates a device the first time it hears from a new `device_id`.
 - **Simulated devices:** the simulator (`server/simulator.py`) uses IDs starting with `sim-` (for example `sim-01`). Every incident from a `sim-` device gets `sample: true`, so the dashboard labels it "sample data". Real helmets must never use the `sim-` prefix.
 - **Zone IDs:** short strings (up to 32 characters, no spaces) that match the floor-plan image, for example `1520-W` or `1522`. The dashboard's floor-plan config (`dashboard/zones.json`) defines the list and a display label for each. Examples elsewhere in this file use `A2` and `B1`; any ID works the same way.
@@ -49,7 +49,7 @@ Sent about once per second.
 | `heat_index_c` | number or null | Computed on the helmet from `temp_c` and `humidity_pct` (NOAA heat index formula). `null` if either input is `null`. |
 | `accel_g` | number or null | Total acceleration magnitude, about 1.0 at rest. Latest sample, not a peak. |
 | `tilt_deg` | number or null | Angle between the helmet's up axis and vertical: 0 = upright, 90 = on its side, 180 = upside down. |
-| `zone` | null | Always `null` from firmware (see section 1). |
+| `zone` | string or null | `null`, or the zone id of the strongest BLE beacon when beacons are on (section 1). Up to 32 characters `A-Z a-z 0-9 . _ -`; anything else is treated as `null`. |
 | `gps_fix` | boolean | `true` only when the GPS has a valid fix. |
 | `lat`, `lon` | number or null | Decimal degrees (WGS84). `null` unless `gps_fix` is `true`. |
 
@@ -74,7 +74,7 @@ Sent as soon as the fall state machine reaches `ALERT`.
 | `peak_g` | number | Highest acceleration during the impact. The IMU clips around 8 g, so treat high values as "8 g or more". |
 | `freefall_ms` | integer | How long free-fall lasted. |
 | `still_s` | number | How long the helmet stayed still before the alert. |
-| `zone` | null | Always `null` from firmware. |
+| `zone` | string or null | Where the helmet was when it fell (beacons), or `null`. A retried event keeps the zone of the first copy the server accepted. |
 | `sent_uptime_ms` | integer, optional | Uptime when this POST was sent. Equal to `uptime_ms` on the first try; larger on retries. |
 
 Response: `{"ok": true, "incident_id": 17}`.
@@ -86,13 +86,20 @@ Response: `{"ok": true, "incident_id": 17}`.
 ## 3. What the server does with incoming messages
 
 1. Looks up the device by `device_id`, creating it if it is new (`name` = `device_id`, `zone` = `null`).
-2. Stamps `ts` (server time) and replaces `zone` with the device's assigned zone.
+2. Stamps `ts` (server time) and picks the message's `zone`, measured before set by hand, and records `zone_source`:
+   1. `"beacon"`: the zone the helmet sent (BLE beacons).
+   2. `"gps"`: the zone rectangle its GPS fix falls in. Needs `gps_points` in `dashboard/zones.json` (three or more spots on the plan with their lat/lon). For a fall, the fix comes from the device's latest telemetry. A fix outside every zone does not count, because GPS is only good to several metres.
+   3. `"manual"`: the zone assigned on the dashboard.
+   4. No zone at all: `zone` and `zone_source` are `null`.
 3. Telemetry: stores the row and updates the device's latest reading and `last_seen`.
 4. Fall event: stores the raw event, then creates an incident (section 5) with:
    - `worker_name` = a copy of the device's `name` at this moment (a snapshot, so history stays correct if the helmet is reassigned);
+   - `zone` and `zone_source` from step 2;
    - `lat`/`lon` from the device's latest telemetry, only if it had `gps_fix: true`;
    - `status` = `"new"`.
 5. Does not suppress anything: when to alert is decided on the helmet.
+
+`dashboard/zones.json` is re-read when it changes, so adding `gps_points` needs no restart.
 
 A device counts as **online** if its last telemetry arrived within the last **5 s**.
 
@@ -105,10 +112,11 @@ A device counts as **online** if its last telemetry arrived within the last **5 
   "last_seen":"2026-11-06T15:04:05.123Z",
   "latest":{"uptime_ms":123456,"worn":true,"temp_c":29.4,"humidity_pct":41.0,
             "pressure_hpa":1009.2,"heat_index_c":30.1,"heat_level":"caution",
-            "accel_g":1.01,"tilt_deg":12.0,"gps_fix":false,"lat":null,"lon":null}}]
+            "accel_g":1.01,"tilt_deg":12.0,"gps_fix":false,"lat":null,"lon":null,
+            "zone":"A2","zone_source":"manual"}}]
 ```
 
-`latest` is `null` until the first telemetry arrives. `heat_level` is computed by the server from `heat_index_c` (section 7).
+`latest` is `null` until the first telemetry arrives. `heat_level` is computed by the server from `heat_index_c` (section 7). The device's `zone` is the one assigned on the dashboard; `latest.zone` and `latest.zone_source` say where its latest reading placed it (section 3). The dashboard places a worker by `latest.zone` when `zone_source` is `"beacon"` or `"gps"`, and by the assigned `zone` otherwise.
 
 ### `PATCH /api/devices/{device_id}`
 
@@ -118,7 +126,17 @@ Assign a worker name and/or a zone. Send only the fields you are changing.
 {"name":"Sam R.","zone":"A2"}
 ```
 
-Response: the updated device, in the same shape as one item from `GET /api/devices`. The dashboard labels the zone **"simulated location"**, because it is set by hand and is not measured.
+Response: the updated device, in the same shape as one item from `GET /api/devices`. The dashboard labels a zone set by hand **"simulated location"**, because it is not measured; zones from beacons or GPS are marked as measured.
+
+### `GET /api/site`
+
+Whether GPS positions can be placed on the floor plan:
+
+```json
+{"gps_ready":true,"max_error_px":1.4,"problems":[]}
+```
+
+`gps_ready` is `true` when `dashboard/zones.json` has usable `gps_points`. `max_error_px` is the worst distance between a `gps_point` and where the fitted map puts it (a large value means a point was measured wrong). `problems` lists anything wrong with the file.
 
 ## 5. Incidents
 
@@ -126,8 +144,8 @@ Response: the updated device, in the same shape as one item from `GET /api/devic
 
 ```json
 {"id":17,"device_id":"helmet-01","worker_name":"Sam R.","type":"fall",
- "ts":"2026-11-06T15:04:06.010Z","zone":"A2","lat":null,"lon":null,
- "peak_g":4.2,"status":"new","notes":"","delayed":false,"sample":false}
+ "ts":"2026-11-06T15:04:06.010Z","zone":"A2","zone_source":"manual","lat":null,"lon":null,
+ "plan_x":null,"plan_y":null,"peak_g":4.2,"status":"new","notes":"","delayed":false,"sample":false}
 ```
 
 | Field | Type | Notes |
@@ -138,7 +156,9 @@ Response: the updated device, in the same shape as one item from `GET /api/devic
 | `type` | string | `"fall"` (from a helmet), `"injury_report"` or `"hazard_report"` (both manual; a hazard is something like a wet floor). |
 | `ts` | string | Server time (ISO 8601 UTC). |
 | `zone` | string or null | |
+| `zone_source` | string or null | How `zone` was found: `"beacon"`, `"gps"`, or `"manual"` (section 3). Manual reports are `"manual"`. Incidents from before 2026-11-07 that have a zone are `"manual"`. |
 | `lat`, `lon` | number or null | |
+| `plan_x`, `plan_y` | number or null | Where `lat`/`lon` is on the floor-plan image, in its pixels (worked out from `gps_points` each time it is asked for). `null` without a position or without `gps_points`. The dashboard draws the fall's red dot here; otherwise it draws it at an approximate spot in `zone`. |
 | `peak_g` | number or null | Falls only. |
 | `status` | string | `"new"`, `"confirmed"`, or `"dismissed"`. |
 | `notes` | string | Free text; empty by default. |
@@ -205,3 +225,4 @@ The server maps `heat_index_c` to `heat_level` using the NWS heat index bands. T
 | 2026-11-06 | S3: added `sample_count` to `GET /api/hazards`; spelled out manual-report rules (known device, name copied from the device, `sim-` reports are sample) and that `PATCH /api/incidents` status can move in any direction. |
 | 2026-11-06 | D5: noted that the dashboard's heat layer uses the same heat bands (section 7). No field changes. |
 | 2026-11-07 | D7: zone ID examples updated for the room 1520 floor plan. No field changes. |
+| 2026-11-07 | Location (D8, decided by Elijah): helmets may send their own `zone` (BLE beacons); the server picks beacon, then GPS, then dashboard zone (section 3). New optional fields: `zone_source` on incidents and `latest`; `latest.zone`; `plan_x`/`plan_y` on incidents. New `GET /api/site`. `zones.json` may have `gps_points`. |

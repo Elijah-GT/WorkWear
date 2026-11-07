@@ -10,6 +10,7 @@
 #include <Wire.h>
 #include <string.h>
 
+#include "beacons.h"
 #include "config.h"
 #include "fall_detector.h"
 #include "heat_index.h"
@@ -54,6 +55,7 @@ void setup() {
   }
   gpsBegin();
   wornBegin();
+  beaconsBegin();  // does nothing unless HAS_BLE_BEACONS is 1
   netBegin();
 
 #if LOG_CSV
@@ -61,11 +63,12 @@ void setup() {
 #endif
 }
 
-static void handleFallResult(FallResult r, const FallEvent& ev) {
+static void handleFallResult(FallResult r, FallEvent& ev) {
   switch (r) {
     case FallResult::ALERT:
-      Serial.printf("# FALL ALERT: peak %.2f g, free-fall %lu ms, still %.1f s\n", ev.peak_g,
-                    (unsigned long)ev.freefall_ms, ev.still_s);
+      beaconZone(ev.zone, sizeof(ev.zone));  // where it happened, if beacons know
+      Serial.printf("# FALL ALERT: peak %.2f g, free-fall %lu ms, still %.1f s, zone %s\n", ev.peak_g,
+                    (unsigned long)ev.freefall_ms, ev.still_s, ev.zone[0] ? ev.zone : "unknown");
       netQueueFall(ev);
       break;
     case FallResult::SUPPRESSED:
@@ -116,18 +119,22 @@ void loop() {
     t.accel_g = imuOk() ? accel_g : NAN;
     t.tilt_deg = imuOk() ? tilt_deg : NAN;
     t.gps_fix = gps_has_fix = gpsFix(&t.lat, &t.lon);
+    beaconZone(t.zone, sizeof(t.zone));
     netPublishTelemetry(t);
   }
 
 #if !LOG_CSV
   if (now - last_status_ms >= STATUS_PERIOD_MS) {
     last_status_ms = now;
+    char zone[ZONE_ID_MAX + 1];
+    beaconZone(zone, sizeof(zone));
     Serial.printf(
         "# accel %.2f g, tilt %.0f deg, %s | %.1f C, %.0f %% RH, heat index %.1f C, %.1f hPa | "
-        "GPS %s (%lu chars) | Wi-Fi %s, %u falls queued | worn %d\n",
+        "GPS %s (%lu chars) | zone %s | Wi-Fi %s, %u falls queued | worn %d\n",
         accel_g, tilt_deg, FallDetector::stateName(detector.state()), env.temp_c,
         env.humidity_pct, heatIndexC(env.temp_c, env.humidity_pct), env.pressure_hpa,
         gps_has_fix ? "fix" : "no fix", (unsigned long)gpsCharsReceived(),
+        zone[0] ? zone : (HAS_BLE_BEACONS ? "unknown" : "set on dashboard"),
         netWifiConnected() ? "up" : "down", (unsigned)netPendingFalls(), worn ? 1 : 0);
   }
 #endif

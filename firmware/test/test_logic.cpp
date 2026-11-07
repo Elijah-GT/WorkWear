@@ -6,12 +6,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <string>
 #include <vector>
 
 #include "../event_queue.h"
 #include "../fall_detector.h"
 #include "../heat_index.h"
 #include "../payload.h"
+#include "../zone_tracker.h"
 
 static int failures = 0;
 static int checks = 0;
@@ -357,7 +359,7 @@ static void test_telemetry_json_missing_values_are_null() {
 }
 
 static void test_fall_event_json() {
-  FallEvent e = {123999, 4.2f, 220, 2.1f};
+  FallEvent e = {123999, 4.2f, 220, 2.1f, ""};
   char buf[256];
   CHECK(buildFallEventJson(buf, sizeof(buf), "helmet-01", e, 126000) > 0);
   const char* expected =
@@ -371,7 +373,7 @@ static void test_json_too_small_buffer() {
   Telemetry t;
   char buf[40];
   CHECK(buildTelemetryJson(buf, sizeof(buf), "helmet-01", t) == -1);
-  FallEvent e = {1, 3.0f, 150, 2.0f};
+  FallEvent e = {1, 3.0f, 150, 2.0f, ""};
   CHECK(buildFallEventJson(buf, sizeof(buf), "helmet-01", e, 1) == -1);
   CHECK(buildFallEventJson(buf, 0, "helmet-01", e, 1) == -1);
 }
@@ -398,9 +400,9 @@ static void test_telemetry_fits_firmware_buffer() {
 static void test_event_queue_order_and_overflow() {
   EventQueue q;
   CHECK(q.empty());
-  for (uint32_t i = 1; i <= EVENT_QUEUE_SIZE; i++) CHECK(q.push({i, 3.0f, 100, 2.0f}));
+  for (uint32_t i = 1; i <= EVENT_QUEUE_SIZE; i++) CHECK(q.push({i, 3.0f, 100, 2.0f, ""}));
   CHECK(q.size() == EVENT_QUEUE_SIZE);
-  CHECK(!q.push({99, 3.0f, 100, 2.0f}));  // full: the oldest (1) is dropped
+  CHECK(!q.push({99, 3.0f, 100, 2.0f, ""}));  // full: the oldest (1) is dropped
   CHECK(q.dropped() == 1);
   CHECK(q.front().uptime_ms == 2);
   std::vector<uint32_t> order;
@@ -414,8 +416,137 @@ static void test_event_queue_order_and_overflow() {
   CHECK(q.empty());
 }
 
+// ---------------- Zone from BLE beacons ----------------
+
+struct Heard {
+  const char* name;
+  int rssi;
+};
+
+static void scan(ZoneTracker& z, uint32_t t, std::vector<Heard> heard) {
+  for (const Heard& h : heard) z.heard(h.name, h.rssi);
+  z.endScan(t);
+}
+
+static void test_zone_from_beacon_name() {
+  char out[ZONE_ID_MAX + 1];
+  CHECK(ZoneTracker::zoneFromName("WW-1520-N", out, sizeof(out)) && strcmp(out, "1520-N") == 0);
+  CHECK(!ZoneTracker::zoneFromName("XX-1520-N", out, sizeof(out)));  // not our prefix
+  CHECK(!ZoneTracker::zoneFromName("WW-", out, sizeof(out)));        // no zone
+  CHECK(!ZoneTracker::zoneFromName("WW-a b", out, sizeof(out)));     // space not allowed
+  CHECK(!ZoneTracker::zoneFromName("WW-a\"b", out, sizeof(out)));    // would break the JSON
+  CHECK(!ZoneTracker::zoneFromName(nullptr, out, sizeof(out)));
+  std::string max32 = "WW-" + std::string(32, 'z');
+  std::string too_long = "WW-" + std::string(33, 'z');
+  CHECK(ZoneTracker::zoneFromName(max32.c_str(), out, sizeof(out)));
+  CHECK(!ZoneTracker::zoneFromName(too_long.c_str(), out, sizeof(out)));
+}
+
+static void test_tracker_picks_the_strongest_beacon() {
+  ZoneTracker z;
+  CHECK(strcmp(z.zone(), "") == 0);
+  scan(z, 1000, {{"WW-A", -60}, {"WW-B", -70}, {"Someone's phone", -30}});
+  CHECK(strcmp(z.zone(), "A") == 0);
+}
+
+static void test_tracker_ignores_weak_beacons() {
+  ZoneTracker z;
+  scan(z, 1000, {{"WW-A", -95}});  // below BEACON_MIN_RSSI (-90)
+  CHECK(strcmp(z.zone(), "") == 0);
+}
+
+static void test_tracker_needs_a_clear_lead_for_two_scans() {
+  ZoneTracker z;
+  scan(z, 1000, {{"WW-A", -60}, {"WW-B", -80}});
+  CHECK(strcmp(z.zone(), "A") == 0);
+  scan(z, 2000, {{"WW-A", -80}, {"WW-B", -55}});  // averages A -70, B -67.5: not 6 dB ahead
+  CHECK(strcmp(z.zone(), "A") == 0);
+  scan(z, 3000, {{"WW-A", -80}, {"WW-B", -55}});  // B clearly ahead: first scan
+  CHECK(strcmp(z.zone(), "A") == 0);
+  scan(z, 4000, {{"WW-A", -80}, {"WW-B", -55}});  // second scan in a row: move
+  CHECK(strcmp(z.zone(), "B") == 0);
+}
+
+static void test_tracker_ignores_a_one_scan_blip() {
+  ZoneTracker z;
+  scan(z, 1000, {{"WW-A", -60}});
+  scan(z, 2000, {{"WW-A", -60}, {"WW-B", -40}});  // B spikes once (someone walks past with it)
+  scan(z, 3000, {{"WW-A", -60}});                 // and is gone again
+  scan(z, 4000, {{"WW-A", -60}});
+  CHECK(strcmp(z.zone(), "A") == 0);
+}
+
+static void test_tracker_moves_when_the_current_beacon_fades() {
+  ZoneTracker z;
+  scan(z, 1000, {{"WW-A", -60}});
+  for (uint32_t t = 2000; t <= 5000; t += 1000) scan(z, t, {{"WW-B", -85}});  // walked away from A
+  CHECK(strcmp(z.zone(), "B") == 0);
+}
+
+static void test_tracker_zone_unknown_when_no_beacons() {
+  ZoneTracker z;
+  scan(z, 1000, {{"WW-A", -60}});
+  for (uint32_t t = 2000; t <= 4000; t += 1000) scan(z, t, {});
+  CHECK(strcmp(z.zone(), "") == 0);  // faded below the minimum: the server falls back
+  scan(z, 20000, {});                // long gone: forgotten
+  scan(z, 21000, {{"WW-B", -70}});
+  CHECK(strcmp(z.zone(), "B") == 0);
+}
+
+static void test_tracker_handles_more_beacons_than_slots() {
+  ZoneTracker z;
+  std::vector<std::string> names;
+  for (int i = 0; i < ZoneTracker::kMaxBeacons + 2; i++) names.push_back("WW-Z" + std::to_string(i));
+  std::vector<Heard> heard;
+  for (size_t i = 0; i < names.size(); i++) heard.push_back({names[i].c_str(), -80 + (int)i});
+  scan(z, 1000, heard);
+  CHECK(strcmp(z.zone(), "Z11") == 0);  // the two extra beacons were ignored, not crashed on
+}
+
+static void test_payloads_carry_the_beacon_zone() {
+  char buf[512];
+  Telemetry t;
+  t.uptime_ms = 5;
+  strcpy(t.zone, "1520-N");
+  CHECK(buildTelemetryJson(buf, sizeof(buf), "helmet-01", t) > 0);
+  CHECK(strstr(buf, "\"zone\":\"1520-N\"") != nullptr);
+  strcpy(t.zone, "bad\"zone");
+  CHECK(buildTelemetryJson(buf, sizeof(buf), "helmet-01", t) > 0);
+  CHECK(strstr(buf, "\"zone\":null") != nullptr);
+
+  FallEvent e = {123999, 4.2f, 220, 2.1f, "1522"};
+  CHECK(buildFallEventJson(buf, sizeof(buf), "helmet-01", e, 123999) > 0);
+  CHECK(strstr(buf, "\"zone\":\"1522\"") != nullptr);
+}
+
+static void test_detector_clears_the_event_zone() {
+  FallDetector d;
+  FallEvent ev;
+  memset(&ev, 'x', sizeof(ev));  // garbage, like an uninitialised local
+  uint32_t t = 0;
+  for (const Seg& s : fallTrace()) {
+    for (uint32_t i = 0; i < s.ms; i += kStepMs, t += kStepMs) {
+      if (d.update({t, s.accel_g, s.gyro_dps, s.tilt_deg, s.worn}, &ev) == FallResult::ALERT) {
+        CHECK(ev.zone[0] == '\0');
+        return;
+      }
+    }
+  }
+  CHECK(false);  // the trace should have alerted
+}
+
 int main() {
   struct Test { const char* name; void (*fn)(); } tests[] = {
+      {"zone from beacon name", test_zone_from_beacon_name},
+      {"tracker picks the strongest beacon", test_tracker_picks_the_strongest_beacon},
+      {"tracker ignores weak beacons", test_tracker_ignores_weak_beacons},
+      {"tracker needs a clear lead for 2 scans", test_tracker_needs_a_clear_lead_for_two_scans},
+      {"tracker ignores a one-scan blip", test_tracker_ignores_a_one_scan_blip},
+      {"tracker moves when current fades", test_tracker_moves_when_the_current_beacon_fades},
+      {"zone unknown with no beacons", test_tracker_zone_unknown_when_no_beacons},
+      {"more beacons than slots", test_tracker_handles_more_beacons_than_slots},
+      {"payloads carry the beacon zone", test_payloads_carry_the_beacon_zone},
+      {"detector clears the event zone", test_detector_clears_the_event_zone},
       {"standing still: no alert", test_standing_still_no_alert},
       {"clean fall alerts", test_clean_fall_alerts},
       {"alert soon after landing", test_alert_soon_after_landing},

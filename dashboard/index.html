@@ -47,8 +47,8 @@
     </section>
 
     <section class="panel panel--map" aria-labelledby="h-map">
-      <h2 id="h-map">Site map <span class="tag tag--sim">Simulated location</span></h2>
-      <p class="panel__note"><span id="site-name"></span> Zones are set by the supervisor on each worker card, not measured.</p>
+      <h2 id="h-map">Site map <span id="map-loc-tag" class="tag tag--sim">Simulated location</span></h2>
+      <p class="panel__note"><span id="site-name"></span> <span id="map-loc-note">Zones are set by the supervisor on each worker card, not measured.</span></p>
       <div class="map__controls">
         <div id="map-layers" class="seg" role="group" aria-label="Map layer">
           <button type="button" class="seg__btn" data-layer="incidents" aria-pressed="true">Incidents</button>
@@ -76,6 +76,10 @@
         <li><span class="legend__zone legend__zone--shade-2"></span>2</li>
         <li><span class="legend__zone legend__zone--shade-3"></span>3 or more</li>
         <li><span class="legend__zone legend__zone--fall"></span>New fall, not reviewed yet</li>
+        <li class="legend__title">Falls:</li>
+        <li><span class="legend__marker marker--new marker--exact"></span>Not reviewed</li>
+        <li><span class="legend__marker marker--confirmed marker--exact"></span>Confirmed</li>
+        <li><span class="legend__marker marker--new marker--approx"></span>Approximate spot (somewhere in its zone)</li>
       </ul>
       <ul class="legend" aria-label="Worker dot colors">
         <li class="legend__title">Worker heat risk:</li>
@@ -86,6 +90,7 @@
         <li><span class="dot__swatch heat--extreme-danger"></span>Extreme danger</li>
         <li><span class="dot__swatch heat--none"></span>No reading</li>
         <li><span class="dot__swatch dot__swatch--fall"></span>New fall</li>
+        <li><span class="legend__located"></span>Blue ring: located by beacons or GPS</li>
       </ul>
     </section>
 
@@ -117,7 +122,8 @@
 
   <footer class="footer">
     Heat risk is based on ambient temperature and humidity at the helmet, not body temperature.
-    Location is a zone set by the supervisor (simulated). Data from simulated helmets is labeled as sample data.
+    Location is the zone set by the supervisor (simulated) unless a helmet locates itself with beacons or GPS,
+    which the map marks. Data from simulated helmets is labeled as sample data.
   </footer>
 </body>
 </html>

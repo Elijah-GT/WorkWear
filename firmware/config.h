@@ -66,6 +66,24 @@
 #define WORN_ACTIVE_LEVEL  LOW      // pin level that means "on a head" (switch to GND, pull-up on)
 #define WORN_DEBOUNCE_MS   500
 
+// ---------------- Indoor location: BLE zone beacons ----------------
+// 1 = scan for zone beacons (spare ESP32s running firmware/beacon/beacon.ino, one per zone)
+// and report the zone of the strongest one. The server then uses it instead of the zone set
+// on the dashboard. 0 = no scanning; the helmet sends "zone": null as before.
+// With 1, pick Tools > Partition Scheme > "Huge APP" (BLE makes the program too big for the
+// default scheme). See firmware/README.md.
+#define HAS_BLE_BEACONS      0
+#define BEACON_NAME_PREFIX   "WW-"   // beacons advertise "WW-<zone id>", e.g. "WW-1520-N"
+#define BEACON_SCAN_S        1       // each scan listens this many seconds
+#define BEACON_MIN_RSSI      -90     // dBm; weaker beacons are ignored
+#define BEACON_SWITCH_DB     6       // a new zone must be this much stronger than the current one...
+#define BEACON_SWITCH_SCANS  2       // ...for this many scans in a row (stops flicker at zone edges)
+#define BEACON_LOST_MS       8000    // no beacon heard this long = zone unknown (server falls back)
+#define BEACON_SMOOTHING     0.5f    // 0-1: weight of the newest scan in each beacon's average
+
+// Longest zone id (same limit as the server and dashboard).
+#define ZONE_ID_MAX 32
+
 // ---------------- Fall detection ----------------
 // State machine: IDLE -> FREEFALL -> IMPACT -> STILL -> ALERT (see fall_detector.h).
 #define FREEFALL_G          0.4f    // total acceleration below this = free-fall

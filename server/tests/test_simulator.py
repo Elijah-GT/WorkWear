@@ -104,3 +104,59 @@ def test_heat_ramp_raises_temperature_up_to_the_cap():
 def test_rejects_bad_device_count():
     with pytest.raises(SystemExit):
         simulator.main(["--devices", "0"])
+
+
+def test_beacon_zones_are_reported_and_used_by_the_server(client):
+    zones = ["1520-N", "1520-S", "1520-W"]
+    sim, rec = make(client, devices=3, beacon_zones=zones, fall_every=50)
+    seen = set()
+    for t in range(101):
+        rec.t = t
+        sim.tick(float(t))
+        seen |= {h.zone for h in sim.helmets}
+    assert seen <= set(zones) and len(seen) >= 2  # helmets moved between zones
+    for d in client.get("/api/devices").json():
+        assert d["latest"]["zone_source"] == "beacon"
+        assert d["latest"]["zone"] in zones
+    falls = client.get("/api/incidents").json()
+    assert len(falls) == 2
+    assert all(i["zone_source"] == "beacon" and i["zone"] in zones for i in falls)
+    assert set(rec.statuses) == {200}
+
+
+def test_helmet_does_not_change_zone_while_lying_still():
+    sim = Simulator(devices=1, beacon_zones=["A", "B"], rng=random.Random(1))
+    h = sim.helmets[0]
+    h.move_at = 0.0     # due to move
+    h.fallen_at = 10.0  # but it just fell
+    before = h.zone
+    sim.move(h, 11.0)
+    assert h.zone == before
+    sim.move(h, 10.0 + simulator.STILL_AFTER_FALL_S + 1)
+    assert h.zone != before
+
+
+def test_gps_fix_stays_within_the_radius():
+    sim = Simulator(devices=2, gps=(41.0, -96.0, 25.0), rng=random.Random(2))
+    for t in range(600):
+        for h in sim.helmets:
+            sim.move(h, float(t))
+            body = sim.telemetry(h, float(t))
+            assert body["gps_fix"] is True
+            north = (body["lat"] - 41.0) * simulator.M_PER_DEG_LAT
+            east = (body["lon"] + 96.0) * simulator.M_PER_DEG_LAT * 0.7547  # cos(41 deg)
+            assert (north ** 2 + east ** 2) ** 0.5 <= 25.5
+
+
+def test_no_location_options_means_no_zone_and_no_fix():
+    sim = Simulator(devices=1, rng=random.Random(1))
+    body = sim.telemetry(sim.helmets[0], 0.0)
+    assert (body["zone"], body["gps_fix"], body["lat"], body["lon"]) == (None, False, None, None)
+
+
+@pytest.mark.parametrize("args", [
+    ["--gps", "41.0"], ["--gps", "abc,1"], ["--gps", "95,0"], ["--beacon-zones", "x" * 33],
+])
+def test_rejects_bad_location_options(args):
+    with pytest.raises(SystemExit):
+        simulator.main(args)

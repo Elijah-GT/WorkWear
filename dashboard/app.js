@@ -3,9 +3,10 @@
 
 import { getJSON, patchJSON, postJSON } from "./api.js";
 import {
-  checkNewFalls, dotLabel, formatAgo, formatClock, formatReading, hazardView, heatInfo,
-  incidentBadges, incidentPlace, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout,
-  namePatch, notesPatch, reportBody, statusActions, summarize, zoneHeatView, zoneOptions, zonePatch,
+  checkNewFalls, dotLabel, fallMarkers, formatAgo, formatClock, formatReading, hazardView, heatInfo,
+  incidentBadges, incidentPlace, incidentTitle, incidentWho, isMeasured, isSimulated, lastSeenText,
+  mapLayout, markerWhere, namePatch, notesPatch, reportBody, statusActions, summarize, workerZone,
+  zoneHeatView, zoneName, zoneOptions, zonePatch, zoneSourceText,
 } from "./logic.js";
 
 const REFRESH_MS = 1000;       // devices and incidents
@@ -13,6 +14,7 @@ const INCIDENT_LIMIT = 200;    // most recent incidents to load
 
 const state = {
   zones: null,          // dashboard/zones.json
+  site: null,           // GET /api/site: can GPS positions go on the plan?
   devices: [],
   incidents: [],
   lastOkAt: null,       // Date.now() of the last successful refresh
@@ -47,6 +49,11 @@ async function loadZones() {
   } catch (err) {
     setText("site-name", `Could not load zones.json (${err.message}); retrying.`);
     setTimeout(loadZones, 5000); // the rest of the page keeps refreshing meanwhile
+  }
+  try {
+    state.site = await getJSON("/api/site");
+  } catch {
+    state.site = null; // older server, or not reachable yet: falls are drawn in their zones
   }
   render();
 }
@@ -186,13 +193,15 @@ function buildCard(device) {
   zoneLabel.append(zone);
   bottom.append(worn, zoneLabel);
 
+  const located = el("div", "worker__located"); // shown when the helmet locates itself
+
   const msg = el("div", "worker__msg");
   msg.setAttribute("role", "status");
 
-  body.append(top, id, heatLine, bottom, msg);
+  body.append(top, id, heatLine, bottom, located, msg);
   root.append(heat, body);
 
-  const card = { root, heat, name, online, id, heatLabel, heatText, worn, zone, msg, device, zoneKey: null };
+  const card = { root, heat, name, online, id, heatLabel, heatText, worn, zone, located, msg, device, zoneKey: null };
 
   name.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); name.blur(); }
@@ -245,6 +254,11 @@ function updateCard(card, device, now) {
     card.zone.value = device.zone ?? "";
     card.zoneKey = key;
   }
+
+  const where = workerZone(device);
+  setText(card.located, isMeasured(where.source)
+    ? `Located in ${zoneName(state.zones, where.zone)} by ${zoneSourceText(where.source)}. The zone above is used when the helmet can't locate itself.`
+    : "");
 }
 
 function renderWorkers() {
@@ -315,11 +329,15 @@ $("alert-hide").addEventListener("click", () => {
   renderMap();
 });
 
-$("alert-show").addEventListener("click", () => {
-  const row = state.alerts[0] && rows.get(state.alerts[0].id);
+function showRow(incidentId) {
+  const row = rows.get(incidentId);
   if (!row) return;
   row.root.scrollIntoView({ behavior: "smooth", block: "center" });
   row.root.focus({ preventScroll: true });
+}
+
+$("alert-show").addEventListener("click", () => {
+  if (state.alerts[0]) showRow(state.alerts[0].id);
 });
 
 // Optional sound. Browsers only allow audio after a click on the page, so it starts off
@@ -591,10 +609,14 @@ const dots = new Map(); // device_id -> { root, swatch, name }
 let mapKey = null;      // rebuild the map only when zones.json gives a different layout
 const zoneLists = new Map(); // zone id -> { cell, list, count, layer }
 let planImageFailed = false;
+let markerLayer = null;      // fall dots on the floor plan
+const markerEls = new Map(); // incident id -> button
 
 function buildGrid(layout) {
   const map = $("map");
   zoneLists.clear();
+  markerEls.clear();
+  markerLayer = null;
   map.style.gridTemplateColumns = "";
   map.style.aspectRatio = "";
   if (layout.cells.length === 0) {
@@ -639,7 +661,57 @@ function buildGrid(layout) {
     zoneLists.set(c.id, { cell, list, count, layer });
     parts.push(cell);
   }
+  if (plan) {
+    markerLayer = el("div", "map__markers");
+    markerLayer.setAttribute("aria-label", "Falls on the map");
+    parts.push(markerLayer);
+  }
   map.replaceChildren(...parts);
+}
+
+// Red dots for falls (incidents layer, floor plan only). Clicking one shows it in the list.
+function renderMarkers(layout) {
+  if (!markerLayer) return;
+  const show = state.layer === "incidents";
+  markerLayer.hidden = !show;
+  const now = Date.now();
+  const list = show ? fallMarkers(state.incidents, layout, { nowMs: now, hours: state.hours }) : [];
+  const byId = new Map(state.incidents.map((i) => [i.id, i]));
+  const alerting = new Set(state.alerts.map((a) => a.id));
+  const keep = new Set();
+  list.forEach((m, i) => {
+    keep.add(m.id);
+    let b = markerEls.get(m.id);
+    if (!b) {
+      b = el("button", "marker");
+      b.type = "button";
+      b.addEventListener("click", () => showRow(m.id));
+      markerEls.set(m.id, b);
+    }
+    const inc = byId.get(m.id);
+    const cls = `marker marker--${m.status}${m.exact ? " marker--exact" : " marker--approx"}${alerting.has(m.id) ? " marker--alert" : ""}`;
+    if (b.className !== cls) b.className = cls;
+    b.style.left = `${m.left}%`;
+    b.style.top = `${m.top}%`;
+    const label = `Fall #${m.id}: ${incidentWho(inc)}, ${formatClock(inc.ts, now)}${
+      inc.peak_g != null ? `, peak ${inc.peak_g} g` : ""}, ${m.status === "new" ? "not reviewed yet" : "confirmed"}${
+      inc.sample ? ", sample data" : ""}. Drawn ${markerWhere(m, state.zones)}. Click to show it in the list.`;
+    if (b.title !== label) { b.title = label; b.setAttribute("aria-label", label); }
+    if (markerLayer.children[i] !== b) markerLayer.insertBefore(b, markerLayer.children[i] ?? null);
+  });
+  for (const [id, b] of markerEls) if (!keep.has(id)) { b.remove(); markerEls.delete(id); }
+  return list;
+}
+
+// Say honestly where worker locations come from: set by hand, or measured by the helmet.
+function renderLocationLabels() {
+  const measured = state.devices.some((d) => isMeasured(workerZone(d).source));
+  const tag = $("map-loc-tag");
+  setText(tag, measured ? "Location: measured where marked" : "Simulated location");
+  tag.className = `tag ${measured ? "tag--measured" : "tag--sim"}`;
+  setText("map-loc-note", measured
+    ? "Workers with a blue ring are located by beacons or GPS; the others are in the zone set on their card."
+    : "Zones are set by the supervisor on each worker card, not measured.");
 }
 
 function buildDot() {
@@ -657,7 +729,8 @@ function placeDots(list, workers, fallen) {
     if (!dot) { dot = buildDot(); dots.set(d.device_id, dot); }
     const level = d.latest?.heat_level ?? null;
     const fell = fallen.has(d.device_id);
-    dot.root.className = `dot${d.online ? "" : " dot--offline"}${fell ? " dot--fall" : ""}`;
+    const measured = isMeasured(workerZone(d).source);
+    dot.root.className = `dot${d.online ? "" : " dot--offline"}${fell ? " dot--fall" : ""}${measured ? " dot--measured" : ""}`;
     dot.swatch.className = `dot__swatch ${heatInfo(level).css}`;
     setText(dot.name, d.name);
     const label = fell ? `${dotLabel(d)}, NEW FALL` : dotLabel(d);
@@ -673,7 +746,7 @@ function renderMap() {
   if (key !== mapKey) { buildGrid(layout); mapKey = key; }
 
   const problems = $("map-problems");
-  const issues = [...layout.problems];
+  const issues = [...layout.problems, ...(state.site?.problems ?? [])];
   if (layout.mode === "plan" && planImageFailed) issues.push(`the floor plan image "${layout.image}" could not be loaded`);
   problems.hidden = issues.length === 0;
   setText(problems, issues.length ? `Check dashboard/zones.json: ${issues.join("; ")}.` : "");
@@ -701,10 +774,14 @@ function renderMap() {
     if (z.cell.title !== label) { z.cell.title = label; z.cell.setAttribute("aria-label", label); }
   }
   $("legend-incidents").hidden = state.layer === "heat";
+  const markers = renderMarkers(layout) ?? [];
+  const approx = markers.some((m) => !m.exact);
   setText("map-layer-note", state.layer === "heat"
     ? "Colored by the highest heat index measured in each zone, in the same colors as the worker dots (heat risk from air conditions, not body temperature)."
     : `Red fill = confirmed incidents (falls and reports), darker = more. New and dismissed incidents do not count.${
-      sample ? " Counts include sample data from simulated helmets." : ""}`);
+      sample ? " Counts include sample data from simulated helmets." : ""}${
+      markers.length ? ` Red dots are falls${approx ? "; a dashed ring means the spot is approximate (somewhere in that zone)" : ""}.` : ""}`);
+  renderLocationLabels();
   placeDots($("map-off"), layout.offMap, fallen);
   $("map-off").parentElement.hidden = layout.offMap.length === 0;
 
@@ -730,6 +807,21 @@ $("map-hours").addEventListener("change", (e) => {
   state.hours = e.target.value ? Number(e.target.value) : null;
   refreshNow();
 });
+
+// Setting up GPS placement: open the page with ?calibrate and click a spot on the plan (for
+// example a building corner) to read its position in image pixels, for zones.json gps_points.
+if (new URLSearchParams(location.search).has("calibrate")) {
+  const out = el("p", "map__calibrate", "Calibrate: click a spot on the floor plan to see its x, y in image pixels.");
+  $("map").after(out);
+  $("map").addEventListener("click", (e) => {
+    const layout = mapLayout(state.zones, []);
+    if (layout.mode !== "plan") return;
+    const r = $("map").getBoundingClientRect();
+    const x = Math.round(((e.clientX - r.left) / r.width) * layout.width);
+    const y = Math.round(((e.clientY - r.top) / r.height) * layout.height);
+    setText(out, `Clicked: "x": ${x}, "y": ${y} (image pixels). Pair it with the spot's lat/lon from a map for gps_points in zones.json.`);
+  });
+}
 
 // --- Page --------------------------------------------------------------------
 

@@ -6,6 +6,7 @@ import {
   checkNewFalls, dotLabel, formatAgo, formatClock, formatReading, hazardView, heatInfo, heatLevelFor,
   incidentBadges, incidentPlace, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout,
   namePatch, notesPatch, reportBody, statusActions, summarize, zoneHeatView, zoneName, zoneOptions, zonePatch,
+  fallMarkers, isMeasured, markerWhere, workerZone, zoneSourceText, zoneSpot,
 } from "../logic.js";
 
 test("isSimulated only matches the sim- prefix", () => {
@@ -339,6 +340,108 @@ test("mapLayout still draws a grid when there is no image", () => {
   assert.equal(m.mode, "grid");
   assert.equal(m.image, null);
   assert.equal(m.cells.length, 2);
+});
+
+// --- Location: beacons, GPS, or set by hand ------------------------------------
+
+const located = (zone, source, manual = "W") =>
+  ({ device_id: "h1", name: "Bo", zone: manual, online: true, latest: { heat_level: null, zone, zone_source: source } });
+
+test("workerZone: a measured zone wins over the one set by hand", () => {
+  assert.deepEqual(workerZone(located("E", "beacon")), { zone: "E", source: "beacon" });
+  assert.deepEqual(workerZone(located("E", "gps")), { zone: "E", source: "gps" });
+  assert.deepEqual(workerZone(located("W", "manual")), { zone: "W", source: "manual" });
+  assert.deepEqual(workerZone(located(null, "beacon")), { zone: "W", source: "manual" }); // nothing measured
+  assert.deepEqual(workerZone(dev("h", null)), { zone: null, source: null });
+  assert.deepEqual(workerZone(dev("h", "W")), { zone: "W", source: "manual" });         // no readings yet
+});
+
+test("zoneSourceText and isMeasured", () => {
+  assert.equal(zoneSourceText("beacon"), "beacons");
+  assert.equal(zoneSourceText("gps"), "GPS");
+  assert.equal(zoneSourceText("manual"), "set by hand");
+  assert.equal(zoneSourceText(null), "set by hand"); // data from before zone_source existed
+  assert.equal(isMeasured("beacon"), true);
+  assert.equal(isMeasured("manual"), false);
+});
+
+test("mapLayout puts a located worker in the measured zone", () => {
+  const m = mapLayout(plan, [located("E", "beacon", "W")]);
+  assert.deepEqual(m.cells.map((c) => [c.id, c.workers.length]), [["W", 0], ["E", 1]]);
+});
+
+test("dotLabel and incidentPlace say when a location was measured", () => {
+  assert.equal(dotLabel(located("E", "beacon")), "Bo: No reading, located by beacons");
+  assert.equal(dotLabel(located("W", "manual")), "Bo: No reading");
+  assert.equal(incidentPlace(inc({ zone_source: "beacon" })), "Zone A2 (beacons)");
+  assert.equal(incidentPlace(inc({ zone_source: "gps" })), "Zone A2 (GPS)");
+  assert.equal(incidentPlace(inc({ zone_source: "manual" })), "Zone A2");
+});
+
+// --- Fall markers ---------------------------------------------------------------
+
+const NOW = Date.parse("2026-11-07T12:00:00Z");
+const fallInc = (over = {}) => ({
+  id: 7, type: "fall", status: "new", ts: "2026-11-07T11:59:00Z", zone: "E", zone_source: "manual",
+  plan_x: null, plan_y: null, ...over,
+});
+const planLayout = () => mapLayout(plan, []); // W: left half; E: x 250-500, y 100-400 (of 500 x 400)
+
+test("zoneSpot is steady and stays in the lower middle of the zone", () => {
+  assert.deepEqual(zoneSpot(7), zoneSpot(7));
+  assert.notDeepEqual(zoneSpot(7), zoneSpot(8));
+  for (let id = 1; id < 500; id++) {
+    const [u, v] = zoneSpot(id);
+    assert.ok(u >= 0.15 && u <= 0.85 && v >= 0.5 && v <= 0.88, `spot for ${id}: ${u}, ${v}`);
+  }
+});
+
+test("fallMarkers draws a fall with a GPS spot exactly there", () => {
+  const [m] = fallMarkers([fallInc({ plan_x: 125, plan_y: 300 })], planLayout(), { nowMs: NOW });
+  assert.deepEqual(m, { id: 7, status: "new", zone: "E", exact: true, source: "gps", left: 25, top: 75 });
+});
+
+test("fallMarkers puts a fall without GPS at a steady spot inside its zone", () => {
+  const [m] = fallMarkers([fallInc({ zone_source: "beacon" })], planLayout(), { nowMs: NOW });
+  assert.equal(m.exact, false);
+  assert.equal(m.source, "beacon");
+  const [u, v] = zoneSpot(7);
+  assert.ok(Math.abs(m.left - (50 + 50 * u)) < 0.01);  // zone E: left 50 %, width 50 %
+  assert.ok(Math.abs(m.top - (25 + 75 * v)) < 0.01);   // zone E: top 25 %, height 75 %
+});
+
+test("fallMarkers falls back to the zone when the GPS spot is off the plan", () => {
+  const [m] = fallMarkers([fallInc({ plan_x: 900, plan_y: 50 })], planLayout(), { nowMs: NOW });
+  assert.equal(m.exact, false);
+});
+
+test("fallMarkers leaves out dismissed, other types, old, and unplaceable incidents", () => {
+  const list = [
+    fallInc({ id: 1, status: "dismissed" }),
+    fallInc({ id: 2, type: "injury_report" }),
+    fallInc({ id: 3, ts: "2026-11-07T09:00:00Z" }), // 3 h old, window is 1 h
+    fallInc({ id: 4, zone: null }),
+    fallInc({ id: 5, zone: "Nowhere" }),
+    fallInc({ id: 6, status: "confirmed" }),
+  ];
+  const ms = fallMarkers(list, planLayout(), { nowMs: NOW, hours: 1 });
+  assert.deepEqual(ms.map((m) => [m.id, m.status]), [[6, "confirmed"]]);
+  assert.equal(fallMarkers(list, planLayout(), { nowMs: NOW }).length, 2); // all time: 3 and 6
+});
+
+test("fallMarkers draws older falls first, and nothing on a grid map", () => {
+  const ms = fallMarkers([fallInc({ id: 9 }), fallInc({ id: 3 })], planLayout(), { nowMs: NOW });
+  assert.deepEqual(ms.map((m) => m.id), [3, 9]);
+  assert.deepEqual(fallMarkers([fallInc()], mapLayout(grid, []), { nowMs: NOW }), []);
+});
+
+test("markerWhere says how sure the spot is", () => {
+  const cfg = { zones: [{ id: "E", label: "East wing" }] };
+  assert.equal(markerWhere({ exact: true }, cfg), "at its GPS position");
+  assert.equal(markerWhere({ exact: false, zone: "E", source: "manual" }, cfg),
+    "approximate: somewhere in East wing (zone set by hand)");
+  assert.equal(markerWhere({ exact: false, zone: "E", source: "beacon" }, cfg),
+    "approximate: somewhere in East wing (zone from beacons)");
 });
 
 test("the shipped zones.json is a valid floor plan with labeled zones", () => {

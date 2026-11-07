@@ -65,8 +65,12 @@ The simulator only uses Python's standard library, so it needs no venv. Helmets 
 | `--resend` | Send each fall twice, to check the server does not duplicate it |
 | `--duration S` | Stop after S seconds (default: run until Ctrl+C) |
 | `--seed N` | Same random values every run |
+| `--beacon-zones Z1,Z2,...` | Helmets report their own zone, as helmets with BLE beacons do, and wander between these zones every 20-40 s. Try `--beacon-zones 1520-W,1520-N,1520-S --fall-every 30`: workers get a blue "located" ring and move around the map, and falls land in the zone they happened in. |
+| `--gps LAT,LON[,RADIUS_M]` | Helmets have a GPS fix drifting within RADIUS_M metres (default 30) of LAT,LON. It shows on the plan only once `dashboard/zones.json` has `gps_points` near that position. |
 
 If the server is down, the simulator prints one warning and keeps retrying falls every 2 s, like a real helmet.
+
+These locations are pretend, from simulated helmets: everything they send is still sample data.
 
 ## 5. Let the ESP32 reach the server
 

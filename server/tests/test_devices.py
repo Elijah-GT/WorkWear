@@ -16,7 +16,7 @@ def test_device_shape(client):
     assert set(d) == {"device_id", "name", "zone", "online", "last_seen", "latest"}
     assert set(d["latest"]) == {
         "uptime_ms", "worn", "temp_c", "humidity_pct", "pressure_hpa", "heat_index_c",
-        "heat_level", "accel_g", "tilt_deg", "gps_fix", "lat", "lon",
+        "heat_level", "accel_g", "tilt_deg", "gps_fix", "lat", "lon", "zone", "zone_source",
     }
 
 

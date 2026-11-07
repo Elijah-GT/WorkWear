@@ -21,7 +21,12 @@ struct Telemetry {
   bool gps_fix = false;
   double lat = NAN;  // sent only when gps_fix is true
   double lon = NAN;
+  char zone[ZONE_ID_MAX + 1] = "";  // from beacons; "" is sent as null
 };
+
+// A zone id safe to send: 1 to ZONE_ID_MAX characters of A-Z a-z 0-9 . _ -
+// (anything else is sent as null, so a bad beacon name can never break the JSON).
+bool zoneIdOk(const char* zone);
 
 // Each returns the JSON length, or -1 if it did not fit in buf.
 int buildTelemetryJson(char* buf, size_t cap, const char* device_id, const Telemetry& t);

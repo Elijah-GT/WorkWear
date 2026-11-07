@@ -14,21 +14,96 @@ static const float kRadToDeg = 57.29578f;
 
 // ---------------- BNO085 ----------------
 
-static Adafruit_BNO08x bno(BNO085_RST_PIN);
-static sh2_SensorValue_t bno_value;
+// No reset pin for the library: its own reset waits only 10 ms, and the BNO085 then accepted its
+// reports but never sent any (tested 2026-11-07). imuBegin() resets it properly instead.
+static Adafruit_BNO08x bno(-1);
 static bool imu_ok = false;
 static float last_gyro_dps = NAN;
 static float last_tilt_deg = NAN;
 
+// Bench findings (2026-11-07), why this does not use the library's getSensorEvent():
+// - The BNO085 packs several reports into one transfer; getSensorEvent() keeps only one, so the
+//   200 Hz accel overwrote the gyro and gravity reports. Our own SH2 callback keeps all of them.
+// - Polling the I2C bus without looking at INT made the report stream stall after ~15 s. Reading
+//   only while INT is low kept it steady (255 accel, 100 gyro, 50 gravity reports/s for 40 s).
+// Accel samples go through a small queue so the fall detector still sees every one, in order.
+static const int kAccelQueue = 32;
+static float accel_queue[kAccelQueue];
+static int accel_head = 0, accel_count = 0;
+
+static void onImuReport(void*, sh2_SensorEvent_t* event) {
+  sh2_SensorValue_t v;
+  if (sh2_decodeSensorEvent(&v, event) != SH2_OK) return;
+  switch (v.sensorId) {
+    case SH2_ACCELEROMETER: {
+      const float x = v.un.accelerometer.x, y = v.un.accelerometer.y, z = v.un.accelerometer.z;
+      const float g = sqrtf(x * x + y * y + z * z) / kStandardGravity;
+      if (accel_count == kAccelQueue) { accel_head = (accel_head + 1) % kAccelQueue; accel_count--; }  // drop oldest
+      accel_queue[(accel_head + accel_count) % kAccelQueue] = g;
+      accel_count++;
+      break;
+    }
+    case SH2_GYROSCOPE_CALIBRATED: {
+      const float x = v.un.gyroscope.x, y = v.un.gyroscope.y, z = v.un.gyroscope.z;
+      last_gyro_dps = sqrtf(x * x + y * y + z * z) * kRadToDeg;
+      break;
+    }
+    case SH2_GRAVITY: {
+      const float g[3] = {v.un.gravity.x, v.un.gravity.y, v.un.gravity.z};
+      const float mag = sqrtf(g[0] * g[0] + g[1] * g[1] + g[2] * g[2]);
+      if (mag > 1.0f) {
+        // The gravity report gives the "up" direction (+9.8 on the axis pointing up when the
+        // board lies flat). Verify on the real helmet: tilt should read ~0 when upright.
+        float c = IMU_UP_SIGN * g[IMU_UP_AXIS] / mag;
+        c = c > 1.0f ? 1.0f : (c < -1.0f ? -1.0f : c);
+        last_tilt_deg = acosf(c) * kRadToDeg;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+// Let the SH2 library process what the sensor sends for a while (used during set-up only).
+static void imuSettle(uint32_t ms) {
+  const uint32_t t0 = millis();
+  while (millis() - t0 < ms) sh2_service();
+}
+
 static bool enableImuReports() {
-  return bno.enableReport(SH2_ACCELEROMETER, ACCEL_INTERVAL_US) &&
-         bno.enableReport(SH2_GYROSCOPE_CALIBRATED, GYRO_INTERVAL_US) &&
-         bno.enableReport(SH2_GRAVITY, GRAVITY_INTERVAL_US);
+  // Slow reports first and the 200 Hz accel stream last, with time for each reply: requests sent
+  // while the sensor is busy streaming were lost on the bench.
+  const bool r = bno.enableReport(SH2_GRAVITY, GRAVITY_INTERVAL_US);
+  imuSettle(30);
+  const bool g = bno.enableReport(SH2_GYROSCOPE_CALIBRATED, GYRO_INTERVAL_US);
+  imuSettle(30);
+  const bool a = bno.enableReport(SH2_ACCELEROMETER, ACCEL_INTERVAL_US);
+  imuSettle(30);
+  return r && g && a;
 }
 
 bool imuBegin() {
   pinMode(BNO085_INT_PIN, INPUT_PULLUP);
-  imu_ok = bno.begin_I2C(BNO085_ADDR, &Wire) && enableImuReports();
+#if BNO085_RST_PIN >= 0
+  // Reset the BNO085 before talking to it. An ESP32 reset (every upload or crash) does not
+  // power-cycle the IMU, and one caught mid-transfer holds SDA low so nothing on the bus
+  // answers (seen on the bench: SDA stuck at 0 until this pulse). Then let it boot.
+  pinMode(BNO085_RST_PIN, OUTPUT);
+  digitalWrite(BNO085_RST_PIN, LOW);
+  delay(20);
+  digitalWrite(BNO085_RST_PIN, HIGH);
+  delay(BNO085_BOOT_MS);
+#endif
+  if (!bno.begin_I2C(BNO085_ADDR, &Wire)) { imu_ok = false; return false; }
+  sh2_setSensorCallback(onImuReport, nullptr);  // replaces the library's one-report handler
+  // Wait for the sensor's "I have (re)started" message, then a little longer, before asking it
+  // for reports.
+  const uint32_t t0 = millis();
+  while (millis() - t0 < 2000 && !bno.wasReset()) sh2_service();
+  imuSettle(200);
+  accel_head = accel_count = 0;
+  imu_ok = enableImuReports();
   return imu_ok;
 }
 
@@ -38,42 +113,16 @@ bool imuPoll(float* accel_g, float* gyro_dps, float* tilt_deg) {
   if (!imu_ok) return false;
   if (bno.wasReset()) enableImuReports();  // the BNO085 forgets its reports after a reset
 
-  // A bounded number of reports per call, so the rest of loop() still runs.
-  for (int i = 0; i < 8 && bno.getSensorEvent(&bno_value); i++) {
-    switch (bno_value.sensorId) {
-      case SH2_ACCELEROMETER: {
-        const float x = bno_value.un.accelerometer.x;
-        const float y = bno_value.un.accelerometer.y;
-        const float z = bno_value.un.accelerometer.z;
-        *accel_g = sqrtf(x * x + y * y + z * z) / kStandardGravity;
-        *gyro_dps = last_gyro_dps;
-        *tilt_deg = last_tilt_deg;
-        return true;
-      }
-      case SH2_GYROSCOPE_CALIBRATED: {
-        const float x = bno_value.un.gyroscope.x;
-        const float y = bno_value.un.gyroscope.y;
-        const float z = bno_value.un.gyroscope.z;
-        last_gyro_dps = sqrtf(x * x + y * y + z * z) * kRadToDeg;
-        break;
-      }
-      case SH2_GRAVITY: {
-        const float g[3] = {bno_value.un.gravity.x, bno_value.un.gravity.y, bno_value.un.gravity.z};
-        const float mag = sqrtf(g[0] * g[0] + g[1] * g[1] + g[2] * g[2]);
-        if (mag > 1.0f) {
-          // The gravity report gives the "up" direction (+9.8 on the axis pointing up when
-          // the board lies flat). Verify on the real helmet: tilt should read ~0 when upright.
-          float c = IMU_UP_SIGN * g[IMU_UP_AXIS] / mag;
-          c = c > 1.0f ? 1.0f : (c < -1.0f ? -1.0f : c);
-          last_tilt_deg = acosf(c) * kRadToDeg;
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  }
-  return false;
+  // Read only while INT says a transfer is waiting; a few per call, so the rest of loop() runs.
+  for (int i = 0; i < 4 && digitalRead(BNO085_INT_PIN) == LOW; i++) sh2_service();
+
+  if (accel_count == 0) return false;
+  *accel_g = accel_queue[accel_head];
+  accel_head = (accel_head + 1) % kAccelQueue;
+  accel_count--;
+  *gyro_dps = last_gyro_dps;
+  *tilt_deg = last_tilt_deg;
+  return true;
 }
 
 // ---------------- BME280 ----------------
@@ -81,9 +130,31 @@ bool imuPoll(float* accel_g, float* gyro_dps, float* tilt_deg) {
 static Adafruit_BME280 bme;
 static bool env_ok = false;
 
+// The BME280's I2C bus: its own (Wire1, on BME280_SDA_PIN/SCL_PIN), or the BNO085's bus (Wire,
+// started in firmware.ino) when config.h gives it the same pins. Only the main loop reads it,
+// so the two buses never need to share a lock.
+static TwoWire* envBus() {
+#if BME280_SDA_PIN == I2C_SDA_PIN && BME280_SCL_PIN == I2C_SCL_PIN
+  return &Wire;
+#else
+  static bool started = false;
+  if (!started) {
+    Wire1.begin(BME280_SDA_PIN, BME280_SCL_PIN, BME280_CLOCK_HZ);
+    started = true;
+  }
+  return &Wire1;
+#endif
+}
+
 bool envBegin() {
+#if BME280_POWER_PIN >= 0
+  // The BME280 is powered from a GPIO (config.h): switch it on and let it boot (datasheet: 2 ms).
+  pinMode(BME280_POWER_PIN, OUTPUT);
+  digitalWrite(BME280_POWER_PIN, HIGH);
+  delay(10);
+#endif
   // begin() checks the chip ID, so a BMP280 (no humidity) fails here on purpose.
-  env_ok = bme.begin(BME280_ADDR, &Wire);
+  env_ok = bme.begin(BME280_ADDR, envBus());
   if (env_ok) {
     // Forced mode, one measurement per read: the sensor stays idle in between, so it does
     // not warm itself up and skew the temperature (Bosch "weather monitoring" settings).

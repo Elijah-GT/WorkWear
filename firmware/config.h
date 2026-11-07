@@ -30,14 +30,25 @@
 #endif
 #define STATUS_PERIOD_MS 5000       // human-readable status line (off while LOG_CSV is 1)
 
-// ---------------- I2C: BNO085 + BME280 ----------------
+// ---------------- I2C: BNO085 (and the BME280's own bus below) ----------------
 #define I2C_SDA_PIN   21
 #define I2C_SCL_PIN   22
-#define I2C_CLOCK_HZ  400000        // drop to 100000 if the BNO085 is flaky
+#define I2C_CLOCK_HZ  400000        // 100000 is too slow for the 200 Hz accel reports (read 0.00 g in a test)
 #define BNO085_ADDR   0x4B          // our GY-BNO085 answers at 0x4B (I2C scan 2026-11-07); some boards use 0x4A
-#define BNO085_RST_PIN 4            // wired per CLAUDE.md; the library pulses it at start-up
-#define BNO085_INT_PIN 19           // wired per CLAUDE.md; unused for now (library polls over I2C)
+#define BNO085_RST_PIN 25           // as wired (was 4); imuBegin() pulses it, which un-sticks the IMU (and
+                                    // the I2C bus) after an ESP32 reset without power-cycling it. -1 = not wired
+#define BNO085_BOOT_MS 300          // wait after the reset pulse before talking to the IMU
+#define I2C_TIMEOUT_MS 200          // the BNO085 holds the bus while it boots; the ESP32 default is 50 ms
+#define BNO085_INT_PIN 19           // wired; the firmware reads the IMU only while INT is low (polling stalled)
 #define BME280_ADDR   0x76          // 0x77 on some boards
+// The BME280 is wired to its own pins and runs on the ESP32's second I2C controller (Wire1).
+// To put it on the shared bus with the BNO085 instead, set these to I2C_SDA_PIN / I2C_SCL_PIN.
+#define BME280_SDA_PIN  32
+#define BME280_SCL_PIN  33
+#define BME280_CLOCK_HZ 100000      // the BME280 is read once a second; slow and safe is fine
+// The BME280's VIN is wired to GPIO27, so the firmware drives that pin HIGH (3.3 V) at start-up to
+// power it (it draws about 1 mA; a pin can supply that). Set -1 if VIN is moved to the 3V3 pin.
+#define BME280_POWER_PIN 27
 
 // IMU report rates (microseconds between samples)
 #define ACCEL_INTERVAL_US    5000   // 200 Hz: short impact spikes need a fast rate
@@ -62,7 +73,10 @@
 // 0 = no sensor fitted: firmware always reports worn: true (decided 2026-11-06).
 // 1 = microswitch or IR proximity module on WORN_PIN.
 #define HAS_WORN_SENSOR    0
-#define WORN_PIN           27
+#define WORN_PIN           26       // was 27; GPIO27 now powers the BME280
+#if HAS_WORN_SENSOR && WORN_PIN == BME280_POWER_PIN
+#error "WORN_PIN and BME280_POWER_PIN are the same GPIO: pick another pin for one of them in config.h"
+#endif
 #define WORN_ACTIVE_LEVEL  LOW      // pin level that means "on a head" (switch to GND, pull-up on)
 #define WORN_DEBOUNCE_MS   500
 

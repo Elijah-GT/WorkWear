@@ -46,10 +46,16 @@ void setup() {
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(I2C_CLOCK_HZ);
+  Wire.setTimeOut(I2C_TIMEOUT_MS);
   logStatus("BNO085 IMU", imuBegin());
   if (!envBegin()) {
     logStatus("BME280", false);
-    Serial.println("#   (check the address in config.h; a BMP280 also fails here, it has no humidity)");
+    char power[12];
+    if (BME280_POWER_PIN >= 0) snprintf(power, sizeof power, "GPIO%d", BME280_POWER_PIN);
+    else snprintf(power, sizeof power, "3V3");
+    Serial.printf("#   (check its power (VIN on %s, GND) and wiring: SDA GPIO%d, SCL GPIO%d; address 0x%02X in config.h;\n"
+                  "#    a BMP280 also fails here, it has no humidity)\n",
+                  power, BME280_SDA_PIN, BME280_SCL_PIN, BME280_ADDR);
   } else {
     logStatus("BME280", true);
   }

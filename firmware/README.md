@@ -44,10 +44,11 @@ Reads the BNO085 (motion), BME280 (temperature, humidity, pressure), NEO-6M GPS 
 | BNO085 | SDA / SCL | GPIO21 / GPIO22 |
 | BNO085 | RST | GPIO4 |
 | BNO085 | INT | GPIO19 (wired, not used yet; the library polls) |
-| BME280 | VIN / GND / SDA / SCL | 3V3 / GND / GPIO21 / GPIO22 (shared I2C) |
+| BME280 | VIN / GND | GPIO27 (the firmware drives it HIGH to power the sensor, `BME280_POWER_PIN`) / GND |
+| BME280 | SDA / SCL | GPIO32 / GPIO33 (its own I2C bus, `Wire1`) |
 | GPS NEO-6M | VCC / GND | 3V3 / GND |
 | GPS NEO-6M | TX / RX | GPIO16 / GPIO17 (crossed: GPS TX goes to the ESP32's receive pin) |
-| Worn sensor (optional) | signal / GND | GPIO27 / GND (switch to GND; set `HAS_WORN_SENSOR 1`) |
+| Worn sensor (optional) | signal / GND | GPIO26 / GND (switch to GND; set `HAS_WORN_SENSOR 1`) |
 
 RST, INT and the worn-sensor pins were picked for this code; change them in `config.h` if the wiring differs. The full wiring write-up belongs in `docs/WIRING.md` (W1).
 

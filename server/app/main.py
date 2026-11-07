@@ -9,22 +9,18 @@ from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
-from typing import Literal
-
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
 
 from . import db
 from .heat import heat_level
-from .models import DevicePatch, FallEvent, Telemetry
+from .models import DevicePatch, FallEvent, IncidentPatch, IncidentReport, IncidentStatus, Telemetry
 
 DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent / "dashboard"
 
 ONLINE_WINDOW = timedelta(seconds=5)   # PROTOCOL.md section 3
 DELAYED_AFTER_MS = 5000                # PROTOCOL.md section 2.2
 SIM_PREFIX = "sim-"                    # PROTOCOL.md section 1
-
-IncidentStatus = Literal["new", "confirmed", "dismissed"]
 
 
 def get_conn(request: Request) -> Iterator[sqlite3.Connection]:
@@ -166,6 +162,48 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         conn: sqlite3.Connection = Depends(get_conn),
     ):
         return [incident_view(i) for i in db.list_incidents(conn, status, limit)]
+
+    @app.post("/api/incidents")
+    def post_incident(rep: IncidentReport, conn: sqlite3.Connection = Depends(get_conn)):
+        worker_name = rep.worker_name
+        if rep.device_id is not None:
+            device = db.get_device(conn, rep.device_id)
+            if device is None:
+                raise HTTPException(status_code=404, detail=f"unknown device_id: {rep.device_id}")
+            if worker_name is None:
+                worker_name = device["name"]  # snapshot, like falls
+        with conn:
+            incident_id = db.insert_incident(conn, {
+                "device_id": rep.device_id,
+                "worker_name": worker_name,
+                "type": rep.type,
+                "ts": db.utc_now(),
+                "zone": rep.zone,
+                "lat": None,
+                "lon": None,
+                "peak_g": None,
+                "status": "new",
+                "notes": rep.notes,
+                "delayed": False,
+                "sample": rep.device_id is not None and rep.device_id.startswith(SIM_PREFIX),
+            })
+        return incident_view(db.get_incident(conn, incident_id))
+
+    @app.patch("/api/incidents/{incident_id}")
+    def patch_incident(incident_id: int, patch: IncidentPatch, conn: sqlite3.Connection = Depends(get_conn)):
+        if db.get_incident(conn, incident_id) is None:
+            raise HTTPException(status_code=404, detail=f"unknown incident id: {incident_id}")
+        with conn:
+            db.update_incident(conn, incident_id, patch.model_dump(include=patch.model_fields_set))
+        return incident_view(db.get_incident(conn, incident_id))
+
+    @app.get("/api/hazards")
+    def get_hazards(
+        hours: float | None = Query(None, gt=0),
+        conn: sqlite3.Connection = Depends(get_conn),
+    ):
+        since = None if hours is None else db.format_ts(db.now() - timedelta(hours=hours))
+        return db.hazards(conn, since)
 
     # Serve the dashboard from "/" once it exists. Registered last, so /api/* wins.
     if DASHBOARD_DIR.is_dir():

@@ -1,6 +1,5 @@
 import pytest
 
-from app import db
 from payloads import fall
 
 
@@ -8,12 +7,8 @@ def make_falls(client, n):
     return [client.post("/api/event", json=fall(uptime_ms=1000 * (i + 1))).json()["incident_id"] for i in range(n)]
 
 
-def set_status(db_file, incident_id, status):
-    # PATCH /api/incidents arrives in S3; set status directly for now.
-    conn = db.connect(db_file)
-    with conn:
-        conn.execute("UPDATE incidents SET status = ? WHERE id = ?", (status, incident_id))
-    conn.close()
+def set_status(client, incident_id, status):
+    client.patch(f"/api/incidents/{incident_id}", json={"status": status})
 
 
 def test_empty_at_start(client):
@@ -34,10 +29,10 @@ def test_newest_first(client):
     assert [i["id"] for i in client.get("/api/incidents").json()] == ids[::-1]
 
 
-def test_filter_by_status(client, db_file):
+def test_filter_by_status(client):
     a, b, c = make_falls(client, 3)
-    set_status(db_file, b, "confirmed")
-    set_status(db_file, c, "dismissed")
+    set_status(client, b, "confirmed")
+    set_status(client, c, "dismissed")
     assert [i["id"] for i in client.get("/api/incidents?status=confirmed").json()] == [b]
     assert [i["id"] for i in client.get("/api/incidents?status=new").json()] == [a]
 

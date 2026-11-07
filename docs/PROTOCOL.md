@@ -155,7 +155,11 @@ Optional query parameters: `status` (`new`, `confirmed`, or `dismissed`), `limit
 {"type":"injury_report","zone":"B1","notes":"Cut hand on rebar","device_id":null,"worker_name":"Alex P."}
 ```
 
-`type` must be `"injury_report"` or `"hazard_report"`; falls only come from helmets. `zone` is required. The server sets `ts` and `status: "new"`, and returns the new incident object.
+`type` must be `"injury_report"` or `"hazard_report"`; falls only come from helmets. `zone` is required; `notes`, `device_id`, and `worker_name` are optional. The server sets `ts` and `status: "new"`, and returns the new incident object.
+
+- If `device_id` is given, it must be a known device (otherwise `404`). When `worker_name` is left out, the server copies the device's current name, as it does for falls.
+- A report for a `sim-` device gets `sample: true`, like its falls.
+- Unknown fields are rejected with `422`, to catch typos on the dashboard.
 
 ### `PATCH /api/incidents/{id}` (stretch)
 
@@ -163,20 +167,21 @@ Optional query parameters: `status` (`new`, `confirmed`, or `dismissed`), `limit
 {"status":"confirmed","notes":"Dropped from scaffold level 2, worker OK"}
 ```
 
-Send only the fields you are changing. Returns the updated incident object.
+Send only the fields you are changing. Returns the updated incident object. `status` can move in any direction (for example a dismissed incident can go back to `new`); `notes` can be set to `""` but not `null`. Returns `404` for an unknown `id`.
 
 ## 6. Hazards (stretch): `GET /api/hazards`
 
-Optional query parameter: `hours` (only count incidents from the last N hours; default: all time).
+Optional query parameter: `hours` (only count incidents and telemetry from the last N hours; must be greater than 0; default: all time).
 
 ```json
-[{"zone":"A2","confirmed_count":3,"max_heat_index_c":31.5},
- {"zone":"B1","confirmed_count":0,"max_heat_index_c":27.0}]
+[{"zone":"A2","confirmed_count":3,"sample_count":1,"max_heat_index_c":31.5},
+ {"zone":"B1","confirmed_count":0,"sample_count":0,"max_heat_index_c":27.0}]
 ```
 
 - `confirmed_count`: incidents in that zone with `status: "confirmed"` (any type). New and dismissed incidents do not count.
+- `sample_count`: how many of those confirmed incidents are sample data (`sample: true`). If it is above 0, the dashboard must say the zone's count includes sample data.
 - `max_heat_index_c`: the highest `heat_index_c` from telemetry tagged with that zone in the same time window, or `null`.
-- Every zone with an incident or with telemetry appears in the list.
+- Every zone with an incident or with telemetry appears in the list, sorted by zone. Incidents and telemetry with no zone are left out.
 
 ## 7. Heat levels
 
@@ -197,3 +202,4 @@ The server maps `heat_index_c` to `heat_level` using the NWS heat index bands. T
 |---|---|
 | 2026-11-06 | First version, from the data contract in `CLAUDE.md` and the decisions in `PLAN.md` section 8. |
 | 2026-11-06 | Added optional `sent_uptime_ms` to fall events and based `delayed` on it. Added the `sim-` device ID rule (incidents marked `sample: true`). |
+| 2026-11-06 | S3: added `sample_count` to `GET /api/hazards`; spelled out manual-report rules (known device, name copied from the device, `sim-` reports are sample) and that `PATCH /api/incidents` status can move in any direction. |

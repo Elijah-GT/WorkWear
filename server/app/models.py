@@ -58,3 +58,35 @@ class DevicePatch(BaseModel):
         if "name" in self.model_fields_set and self.name is None:
             raise ValueError("name cannot be null")
         return self
+
+
+IncidentStatus = Literal["new", "confirmed", "dismissed"]
+Notes = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]
+
+
+class IncidentReport(BaseModel):
+    """POST /api/incidents: a manual report entered on the dashboard. Falls only come from helmets."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["injury_report", "hazard_report"]
+    zone: Zone
+    notes: Notes = ""
+    device_id: DeviceId | None = None
+    worker_name: Name | None = None
+
+
+class IncidentPatch(BaseModel):
+    """PATCH /api/incidents/{id}. Only the fields sent are changed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: IncidentStatus | None = None
+    notes: Notes | None = None
+
+    @model_validator(mode="after")
+    def fields_cannot_be_null(self):
+        for field in ("status", "notes"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self

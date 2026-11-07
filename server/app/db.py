@@ -201,3 +201,54 @@ def list_incidents(conn: sqlite3.Connection, status: str | None, limit: int) -> 
     return conn.execute(
         "SELECT * FROM incidents WHERE status = ? ORDER BY id DESC LIMIT ?", (status, limit)
     ).fetchall()
+
+
+def get_incident(conn: sqlite3.Connection, incident_id: int) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM incidents WHERE id = ?", (incident_id,)).fetchone()
+
+
+def update_incident(conn: sqlite3.Connection, incident_id: int, fields: dict) -> None:
+    """Set the given columns (only "status" and "notes" are allowed)."""
+    allowed = {k: v for k, v in fields.items() if k in ("status", "notes")}
+    if not allowed:
+        return
+    assignments = ", ".join(f"{col} = ?" for col in allowed)
+    conn.execute(f"UPDATE incidents SET {assignments} WHERE id = ?", (*allowed.values(), incident_id))
+
+
+def hazards(conn: sqlite3.Connection, since: str | None) -> list[dict]:
+    """Per zone: confirmed incidents (and how many are sample data) and the highest heat index.
+
+    since: only count incidents and readings at or after this server time; None = all time.
+    Incidents and readings with no zone are left out, since they cannot go on the map.
+    """
+    by_zone: dict[str, dict] = {}
+
+    def entry(zone: str) -> dict:
+        return by_zone.setdefault(
+            zone, {"zone": zone, "confirmed_count": 0, "sample_count": 0, "max_heat_index_c": None}
+        )
+
+    for r in conn.execute(
+        """SELECT zone,
+                  SUM(status = 'confirmed') AS confirmed,
+                  SUM(status = 'confirmed' AND sample = 1) AS sample
+           FROM incidents
+           WHERE zone IS NOT NULL AND (? IS NULL OR ts >= ?)
+           GROUP BY zone""",
+        (since, since),
+    ):
+        e = entry(r["zone"])
+        e["confirmed_count"] = r["confirmed"]
+        e["sample_count"] = r["sample"]
+
+    for r in conn.execute(
+        """SELECT zone, MAX(heat_index_c) AS max_hi
+           FROM telemetry
+           WHERE zone IS NOT NULL AND (? IS NULL OR ts >= ?)
+           GROUP BY zone""",
+        (since, since),
+    ):
+        entry(r["zone"])["max_heat_index_c"] = r["max_hi"]
+
+    return [by_zone[z] for z in sorted(by_zone)]

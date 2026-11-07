@@ -115,13 +115,28 @@ function renderConnection() {
   }
 }
 
-function renderTiles() {
+// Counts on the tabs: workers online, and new (unreviewed) incidents in red.
+function renderTabCounts() {
   const s = summarize(state.devices, state.incidents);
-  setText("t-online", `${s.online} / ${s.devices}`);
-  setText("t-new", String(s.newIncidents));
-  setText("t-incidents", String(s.incidents));
-  setText("t-sim", String(s.simulated));
+  setText("tab-workers", s.devices ? `${s.online}/${s.devices}` : "");
+  setText("tab-incidents", s.newIncidents ? String(s.newIncidents) : "");
+  $("tab-incidents").classList.toggle("tabbar__count--alert", s.newIncidents > 0);
 }
+
+// --- Views -------------------------------------------------------------------
+// The tab bar shows one panel at a time; style.css hides the others (body[data-view]).
+
+function setView(view) {
+  if (document.body.dataset.view === view) return;
+  document.body.dataset.view = view;
+  for (const b of document.querySelectorAll(".tabbar__btn")) b.setAttribute("aria-pressed", String(b.dataset.view === view));
+  window.scrollTo(0, 0);
+}
+
+for (const b of document.querySelectorAll(".tabbar__btn")) b.addEventListener("click", () => setView(b.dataset.view));
+
+// The map key sits beside the map on wide screens (open); below it on smaller ones (folded).
+$("map-key").open = window.matchMedia("(min-width: 1000px)").matches;
 
 // --- Workers (D2) ------------------------------------------------------------
 // Each card is built once and then updated in place, so a name being typed or a
@@ -257,7 +272,7 @@ function updateCard(card, device, now) {
 
   const where = workerZone(device);
   setText(card.located, isMeasured(where.source)
-    ? `Located in ${zoneName(state.zones, where.zone)} by ${zoneSourceText(where.source)}. The zone above is used when the helmet can't locate itself.`
+    ? `Located in ${zoneName(state.zones, where.zone)} by ${zoneSourceText(where.source)}. The zone picked above is the backup.`
     : "");
 }
 
@@ -332,6 +347,7 @@ $("alert-hide").addEventListener("click", () => {
 function showRow(incidentId) {
   const row = rows.get(incidentId);
   if (!row) return;
+  setView("incidents");
   row.root.scrollIntoView({ behavior: "smooth", block: "center" });
   row.root.focus({ preventScroll: true });
 }
@@ -627,11 +643,13 @@ function buildGrid(layout) {
     return;
   }
   const plan = layout.mode === "plan";
+  $("mapbox").classList.toggle("mapbox--plan", plan);
   const parts = [];
   if (plan) {
     // Floor plan: the image fills the box, and zones sit on it at their % positions.
     map.className = "map map--plan";
     map.style.aspectRatio = `${layout.width} / ${layout.height}`;
+    $("mapbox").style.setProperty("--plan-aspect", String(layout.width / layout.height)); // style.css fits the plan to its box
     planImageFailed = false;
     const img = el("img", "map__img");
     img.alt = ""; // decorative: the zones below carry the names
@@ -752,6 +770,9 @@ function renderMap() {
   setText(problems, issues.length ? `Check dashboard/zones.json: ${issues.join("; ")}.` : "");
 
   const fallen = new Set(state.alerts.map((a) => a.device_id));
+  // Outline the zone the fall happened in, not where the worker is now: a helmet that locates
+  // itself may have moved on since.
+  const fallZones = new Set(state.alerts.map((a) => a.zone).filter(Boolean));
   const hazards = new Map(state.hazards.map((h) => [h.zone, h]));
   let sample = 0;
   for (const c of layout.cells) {
@@ -760,7 +781,7 @@ function renderMap() {
     placeDots(z.list, c.workers, fallen);
     const workers = c.workers.length === 1 ? "1 worker" : `${c.workers.length} workers`;
     setText(z.count, workers);
-    const hasFall = c.workers.some((d) => fallen.has(d.device_id));
+    const hasFall = fallZones.has(c.id);
     // Layer (D5): confirmed incidents fill the zone red, or heat colors it. A new fall is an
     // outline and a "New fall" tag, never a fill, so it can't be mistaken for a past hazard.
     const h = hazards.get(c.id);
@@ -812,7 +833,7 @@ $("map-hours").addEventListener("change", (e) => {
 // example a building corner) to read its position in image pixels, for zones.json gps_points.
 if (new URLSearchParams(location.search).has("calibrate")) {
   const out = el("p", "map__calibrate", "Calibrate: click a spot on the floor plan to see its x, y in image pixels.");
-  $("map").after(out);
+  $("mapbox").after(out);
   $("map").addEventListener("click", (e) => {
     const layout = mapLayout(state.zones, []);
     if (layout.mode !== "plan") return;
@@ -829,7 +850,7 @@ function render() {
   renderConnection();
   renderAlert();
   if (state.lastOkAt === null) return; // nothing loaded yet
-  renderTiles();
+  renderTabCounts();
   renderWorkers();
   renderIncidents();
   renderMap();

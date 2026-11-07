@@ -54,31 +54,69 @@ h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap
 .conn--up { background: #e6f4ea; color: var(--ok); }
 .conn--down { background: #fde8e7; color: var(--bad); border-color: var(--bad); }
 
-/* Summary tiles */
-.tiles {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--gap);
-  margin-bottom: var(--gap);
-}
-.tile {
-  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 12px 16px; display: flex; flex-direction: column;
-}
-.tile__value { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.tile__label { color: var(--muted); }
+/* Views: the tab bar shows one panel at a time (body[data-view]). The Map view fills the
+   window below the header, so the whole plan is on screen and the page does not scroll. */
+body { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+.layout { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+body[data-view="map"] .panel:not(.panel--map),
+body[data-view="workers"] .panel:not(.panel--workers),
+body[data-view="incidents"] .panel:not(.panel--incidents) { display: none; }
+body[data-view="map"] { height: 100vh; height: 100dvh; }
+body[data-view="map"] .footer { display: none; }
 
-/* Main layout: workers + map on the left, incidents on the right; stacked on narrow screens */
-.layout {
-  display: grid; gap: var(--gap);
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  grid-template-areas: "workers incidents" "map incidents";
-  grid-template-rows: auto 1fr; /* a long incident list adds space below the map, not above it */
-  align-items: start;
+.panel--map { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.mapwrap { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.mapwrap__main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.mapbox { flex: 1; min-height: 240px; }
+/* Floor plan: the box is the plan's shape at full width, shrunk when the window is too short;
+   the plan is as big as the box allows while keeping its shape (cqw/cqh = the box's size). */
+.mapbox--plan { container-type: size; flex: 0 1 auto; width: 100%; aspect-ratio: var(--plan-aspect, 1); }
+.mapbox--plan .map--plan { width: min(100cqw, 100cqh * var(--plan-aspect, 1)); margin: 0 auto; }
+@media (min-width: 1000px) {
+  .mapwrap { flex-direction: row; }
+  .mapwrap__main { min-width: 0; }
+  .mapkey { flex: 0 0 300px; overflow-y: auto; margin-top: 0; }
 }
-.panel--workers { grid-area: workers; }
-.panel--map { grid-area: map; }
-.panel--incidents { grid-area: incidents; }
-@media (max-width: 900px) {
-  .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "workers" "map" "incidents"; }
+.incidents, .report { max-width: 60rem; }
+
+/* Tab bar: in the header on wide screens */
+.tabbar { display: flex; gap: 4px; background: #e6e8ec; padding: 4px; border-radius: 10px; }
+.tabbar__btn {
+  font: inherit; font-size: 0.95rem; font-weight: 700; color: var(--muted);
+  background: transparent; border: 0; border-radius: 8px; padding: 6px 14px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.tabbar__btn:hover { color: var(--text); }
+.tabbar__btn[aria-pressed="true"] { background: var(--panel); color: var(--accent); box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }
+.tabbar__btn:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+.tabbar__count { font-size: 0.75rem; min-width: 1.5em; padding: 1px 6px; border-radius: 999px; background: #d9dce3; color: var(--text); }
+.tabbar__count:empty { display: none; }
+.tabbar__count--alert { background: var(--bad); color: #fff; }
+
+/* Phones: tab bar fixed at the bottom, compact header */
+@media (max-width: 700px) {
+  :root { --gap: 10px; font-size: 16px; }
+  body { padding: 0 8px calc(72px + env(safe-area-inset-bottom)); }
+  .topbar { padding: 8px 0; gap: 8px; flex-wrap: nowrap; }
+  .brand h1 { font-size: 1.25rem; }
+  .subtitle { display: none; }
+  .topbar__right { gap: 6px; flex-wrap: nowrap; }
+  .topbar .btn, .conn { font-size: 0.8rem; padding: 4px 8px; white-space: nowrap; }
+  .panel { padding: 10px; }
+  .alert { padding: 10px 12px; gap: 8px; }
+  .alert__title { font-size: 1.15rem; }
+  .panel--map .panel__note { font-size: 0.8rem; }
+
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; border-radius: 0;
+    background: var(--panel); border-top: 1px solid var(--border);
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); gap: 6px;
+    box-shadow: 0 -2px 10px rgb(0 0 0 / 0.08);
+  }
+  .tabbar__btn { flex: 1; padding: 10px 4px; }
+  .tabbar__btn[aria-pressed="true"] { background: #e3ecfa; box-shadow: none; }
+  .tabbar__count { background: #eceef2; color: var(--muted); }
+  .tabbar__count--alert { background: var(--bad); color: #fff; }
 }
 
 .panel {
@@ -170,7 +208,6 @@ h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap
 
 /* Incident list (D3) */
 .incidents { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-@media (min-width: 901px) { .incidents { max-height: 75vh; overflow-y: auto; padding-right: 4px; } }
 .incident {
   border: 1px solid var(--border); border-left: 6px solid var(--muted); border-radius: var(--radius);
   padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere;
@@ -252,6 +289,10 @@ h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap
 .map__off[hidden] { display: none; }
 .map__offtitle { font-size: 0.9rem; color: var(--muted); margin: 0 0 6px; }
 
+.mapkey { margin: 0; }
+.mapkey > summary { cursor: pointer; font-weight: 700; font-size: 0.9rem; color: var(--accent); padding: 4px 0; }
+.mapkey > .panel__note { margin: 6px 0 0; }
+.mapkey .legend__title { flex-basis: 100%; } /* each group starts on its own line */
 .legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); }
 .legend li { display: inline-flex; align-items: center; gap: 6px; }
 .legend .dot__swatch { width: 14px; height: 14px; }

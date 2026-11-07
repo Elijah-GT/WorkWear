@@ -2,17 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f5f7">
   <title>WorkWear site safety</title>
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
 </head>
-<body>
+<body data-view="map">
   <header class="topbar">
     <div class="brand">
       <h1>WorkWear</h1>
       <span class="subtitle">Site safety dashboard</span>
     </div>
+    <!-- One view at a time. In the header on wide screens, fixed at the bottom on phones (CSS). -->
+    <nav class="tabbar" aria-label="Views">
+      <button type="button" class="tabbar__btn" data-view="map" aria-pressed="true">Map</button>
+      <button type="button" class="tabbar__btn" data-view="workers" aria-pressed="false">Workers <span class="tabbar__count" id="tab-workers" title="Online / all helmets"></span></button>
+      <button type="button" class="tabbar__btn" data-view="incidents" aria-pressed="false">Incidents <span class="tabbar__count" id="tab-incidents" title="New, not reviewed yet"></span></button>
+    </nav>
     <div class="topbar__right">
       <button id="sound" class="btn btn--quiet" type="button" aria-pressed="false"
               title="Play a sound when a new fall comes in">Alert sound: off</button>
@@ -32,13 +39,6 @@
       <button id="alert-hide" class="btn" type="button">Hide alert</button>
     </div>
   </div>
-
-  <section class="tiles" aria-label="Summary">
-    <div class="tile"><span class="tile__value" id="t-online">–</span><span class="tile__label">Workers online</span></div>
-    <div class="tile"><span class="tile__value" id="t-new">–</span><span class="tile__label">New incidents</span></div>
-    <div class="tile"><span class="tile__value" id="t-incidents">–</span><span class="tile__label">Recent incidents</span></div>
-    <div class="tile"><span class="tile__value" id="t-sim">–</span><span class="tile__label">Simulated helmets</span></div>
-  </section>
 
   <main class="layout">
     <section class="panel panel--workers" aria-labelledby="h-workers">
@@ -63,13 +63,18 @@
           </select>
         </label>
       </div>
-      <p class="panel__note" id="map-layer-note"></p>
-      <div id="map-problems" class="map__problems" role="status" hidden></div>
-      <div id="map" class="map" aria-label="Site zones"></div>
-      <div class="map__off">
-        <h3 class="map__offtitle">Not on the map</h3>
-        <ul id="map-off" class="dots" aria-label="Workers with no zone on the map"></ul>
+      <div class="mapwrap">
+      <div class="mapwrap__main">
+        <div id="map-problems" class="map__problems" role="status" hidden></div>
+        <div class="mapbox" id="mapbox"><div id="map" class="map" aria-label="Site zones"></div></div>
+        <div class="map__off">
+          <h3 class="map__offtitle">Not on the map</h3>
+          <ul id="map-off" class="dots" aria-label="Workers with no zone on the map"></ul>
+        </div>
       </div>
+      <details class="mapkey" id="map-key">
+      <summary>Map key</summary>
+      <p class="panel__note" id="map-layer-note"></p>
       <ul class="legend" id="legend-incidents" aria-label="Zone colors">
         <li class="legend__title">Zones:</li>
         <li><span class="legend__zone legend__zone--shade-1"></span>1 confirmed incident</li>
@@ -92,6 +97,8 @@
         <li><span class="dot__swatch dot__swatch--fall"></span>New fall</li>
         <li><span class="legend__located"></span>Blue ring: located by beacons or GPS</li>
       </ul>
+      </details>
+      </div>
     </section>
 
     <section class="panel panel--incidents" aria-labelledby="h-incidents">

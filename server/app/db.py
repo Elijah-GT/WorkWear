@@ -78,9 +78,23 @@ def db_path() -> Path:
     return Path(os.environ.get("WORKWEAR_DB", DEFAULT_DB_PATH))
 
 
+def now() -> datetime:
+    """Current UTC time. Tests replace this to move the clock."""
+    return datetime.now(timezone.utc)
+
+
+def format_ts(dt: datetime) -> str:
+    """ISO 8601 UTC with milliseconds, e.g. 2026-11-06T15:04:05.123Z."""
+    return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def parse_ts(ts: str) -> datetime:
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
 def utc_now() -> str:
-    """Server timestamp, ISO 8601 UTC with milliseconds, e.g. 2026-11-06T15:04:05.123Z."""
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    """Server timestamp for a message received now."""
+    return format_ts(now())
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -101,3 +115,89 @@ def init_db(path: Path) -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Queries. Each takes an open connection; the caller owns the transaction.
+# ---------------------------------------------------------------------------
+
+def ensure_device(conn: sqlite3.Connection, device_id: str, ts: str) -> sqlite3.Row:
+    """Return the device, creating it (name = device_id, no zone) if it is new."""
+    conn.execute(
+        "INSERT OR IGNORE INTO devices (device_id, name, created_ts) VALUES (?, ?, ?)",
+        (device_id, device_id, ts),
+    )
+    return get_device(conn, device_id)
+
+
+def get_device(conn: sqlite3.Connection, device_id: str) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM devices WHERE device_id = ?", (device_id,)).fetchone()
+
+
+def list_devices(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return conn.execute("SELECT * FROM devices ORDER BY device_id").fetchall()
+
+
+def update_device(conn: sqlite3.Connection, device_id: str, fields: dict) -> None:
+    """Set the given columns (only "name" and "zone" are allowed)."""
+    allowed = {k: v for k, v in fields.items() if k in ("name", "zone")}
+    if not allowed:
+        return
+    assignments = ", ".join(f"{col} = ?" for col in allowed)
+    conn.execute(
+        f"UPDATE devices SET {assignments} WHERE device_id = ?",
+        (*allowed.values(), device_id),
+    )
+
+
+def insert_telemetry(conn: sqlite3.Connection, t: dict, ts: str, zone: str | None) -> None:
+    conn.execute(
+        """INSERT INTO telemetry (device_id, ts, uptime_ms, worn, temp_c, humidity_pct,
+               pressure_hpa, heat_index_c, accel_g, tilt_deg, zone, gps_fix, lat, lon)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (t["device_id"], ts, t["uptime_ms"], t["worn"], t["temp_c"], t["humidity_pct"],
+         t["pressure_hpa"], t["heat_index_c"], t["accel_g"], t["tilt_deg"], zone,
+         t["gps_fix"], t["lat"], t["lon"]),
+    )
+    conn.execute("UPDATE devices SET last_seen = ? WHERE device_id = ?", (ts, t["device_id"]))
+
+
+def latest_telemetry(conn: sqlite3.Connection, device_id: str) -> sqlite3.Row | None:
+    return conn.execute(
+        "SELECT * FROM telemetry WHERE device_id = ? ORDER BY id DESC LIMIT 1", (device_id,)
+    ).fetchone()
+
+
+def find_event(conn: sqlite3.Connection, device_id: str, uptime_ms: int) -> sqlite3.Row | None:
+    return conn.execute(
+        "SELECT * FROM events WHERE device_id = ? AND uptime_ms = ?", (device_id, uptime_ms)
+    ).fetchone()
+
+
+def insert_incident(conn: sqlite3.Connection, inc: dict) -> int:
+    cur = conn.execute(
+        """INSERT INTO incidents (device_id, worker_name, type, ts, zone, lat, lon,
+               peak_g, status, notes, delayed, sample)
+           VALUES (:device_id, :worker_name, :type, :ts, :zone, :lat, :lon,
+               :peak_g, :status, :notes, :delayed, :sample)""",
+        inc,
+    )
+    return cur.lastrowid
+
+
+def insert_event(conn: sqlite3.Connection, ev: dict, ts: str, zone: str | None, incident_id: int) -> None:
+    conn.execute(
+        """INSERT INTO events (device_id, ts, uptime_ms, sent_uptime_ms, type, peak_g,
+               freefall_ms, still_s, zone, incident_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (ev["device_id"], ts, ev["uptime_ms"], ev["sent_uptime_ms"], ev["type"], ev["peak_g"],
+         ev["freefall_ms"], ev["still_s"], zone, incident_id),
+    )
+
+
+def list_incidents(conn: sqlite3.Connection, status: str | None, limit: int) -> list[sqlite3.Row]:
+    if status is None:
+        return conn.execute("SELECT * FROM incidents ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return conn.execute(
+        "SELECT * FROM incidents WHERE status = ? ORDER BY id DESC LIMIT ?", (status, limit)
+    ).fetchall()

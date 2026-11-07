@@ -99,12 +99,14 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
 - [x] **D5. Stretch:** confirm/dismiss/notes, manual report form, hazard shading, falls/heat toggle, sample note. *Done when:* A7 passes. Done 2026-11-06: A7 passes; 31 scripted browser checks in real time (confirm shades the zone in ~50 ms, dismissed and new incidents don't count, sample counts are labeled, a note being typed survives refreshes, reports saved from the form, heat layer, time window, confirming a fall clears its alert); fits 390 px; 30 `node --test` tests. Zones are shaded (no GPS markers: the indoor demo has no fix).
 - [x] **D6. Docs + check:** how to open it, screenshots at desktop and phone width. Done 2026-11-06: `dashboard/README.md` (open, page tour, label meanings, editing `zones.json`, tests, troubleshooting) with screenshots in `docs/img/`. Checked by following the READMEs in a fresh clone from GitHub: install, 126 server + 30 dashboard tests, server and simulator started as written, `http://localhost:8000/` showed Connected and 3 simulated helmets on the cards and map. Writing the README found one bug, now fixed: after a failed zone save the zone list kept showing the unsaved zone (5 browser checks with a proxy that refuses saves).
 
+- [x] **D7. Floor plan + map colors.** *Claude (for Elijah), 2026-11-07.* Done: the map is now the floor plan of room 1520 (`dashboard/floorplan.png`, from the building plan with room names inside the zones and the outdoor labels removed) with six zones: 1520 West, North, South and Alcove, 1522 Seminar Room, 1533 Data Tech Lab. `zones.json` places zones as rectangles in image pixels; the old grid format still works when there is no image. Colors fixed: a new fall is a pulsing red outline plus a "NEW FALL" tag (never a fill), and confirmed incidents are a red fill (light, medium, dark = 1, 2, 3+) plus a count tag, so confirming a fall visibly turns its zone red (demo step 6). Before, both were nearly the same pale pink, and confirming made the zone look *less* red. The heat layer tints whole zones in heat colors. Empty zones no longer repeat "No confirmed incidents". Incident list and banner show zone labels ("Zone 1520 West"). Also fixed: no space between the site name and the note above the map, and `zones.json` is now retried if it fails to load. Checked: 37 `node --test` tests (7 new, including that the shipped `zones.json` is valid); in Chrome with the simulator, a staged fall showed the outline and tag, and clicking Confirm turned the zone into a red fill 54 ms later; heat layer; 390 px phone width with no sideways scroll; no console errors. New screenshots in `docs/img/`.
+
 Original task list (covered by the phases above):
-- [ ] Device list with names and status, incident list, zone map on a floor-plan image, heat color per worker.
-- [ ] Zone picker per device, labeled "simulated location". Incidents with `sample: true` labeled "sample data".
-- [ ] Stretch: incident status (new, confirmed, dismissed) with confirm and dismiss controls.
-- [ ] Stretch: manual "report injury or hazard" form (zone and note).
-- [ ] Stretch: hazard map layer (red markers or shaded zones by confirmed incident count) and a falls/heat layer toggle.
+- [x] Device list with names and status, incident list, zone map on a floor-plan image, heat color per worker. *(Floor plan added in D7.)*
+- [x] Zone picker per device, labeled "simulated location". Incidents with `sample: true` labeled "sample data".
+- [x] Stretch: incident status (new, confirmed, dismissed) with confirm and dismiss controls.
+- [x] Stretch: manual "report injury or hazard" form (zone and note).
+- [x] Stretch: hazard map layer (red markers or shaded zones by confirmed incident count) and a falls/heat layer toggle. *(Shaded zones; GPS markers not built, since the indoor demo has no fix.)*
 
 ### W5. Research, pitch, and demo (Owner: TBD)
 - [ ] Send customer discovery emails (use the team doc; fill in names and contacts). Log replies.
@@ -162,6 +164,7 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 | 2026-11-07 | Firmware pins picked (not in CLAUDE.md): BNO085 RST GPIO4, INT GPIO19 (wired but unused: the Adafruit library polls over I2C), worn sensor GPIO27. W1: confirm or change in `firmware/config.h` and record in `docs/WIRING.md` | Claude |
 | 2026-11-07 | Firmware: Wi-Fi and HTTP run on a separate task (core 0), because a failed POST can block for 3 s and would otherwise pause fall detection. The BME280 runs in forced mode, one reading a second, so it does not warm itself up. Wi-Fi name and password go in `firmware/secrets.h` (git-ignored), not `config.h` | Claude |
 | 2026-11-07 | Firmware: tilt comes from the BNO085 gravity report and assumes the IMU's +Z axis points up through the crown (`IMU_UP_AXIS`/`IMU_UP_SIGN`). Not yet checked on the real board | Claude |
+| 2026-11-07 | Demo room is 1520 (Carlsen Center); floor plan provided by Elijah. Zone IDs are now `1520-W`, `1520-N`, `1520-S`, `1520-A`, `1522`, `1533` (were `A1` to `B3`). Helmets set to an old zone show under "Not on the map" until a new zone is picked; old incidents keep their old zone. How 1520 is split into zones was Claude's choice; change it in `dashboard/zones.json` if the demo layout needs other areas | Claude |
 | | Battery runtime with Wi-Fi + GPS on: TBD (measure) | |
 | | Threshold values after tuning: TBD | |
 

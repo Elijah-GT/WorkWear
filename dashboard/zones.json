@@ -1,13 +1,14 @@
 {
-  "site": "Demo site (generic grid)",
-  "cols": 3,
-  "rows": 2,
+  "site": "Room 1520, Carlsen Center for Innovation and Entrepreneurship",
+  "image": "floorplan.png",
+  "width": 555,
+  "height": 505,
   "zones": [
-    { "id": "A1", "label": "A1", "col": 0, "row": 0 },
-    { "id": "A2", "label": "A2", "col": 1, "row": 0 },
-    { "id": "A3", "label": "A3", "col": 2, "row": 0 },
-    { "id": "B1", "label": "B1", "col": 0, "row": 1 },
-    { "id": "B2", "label": "B2", "col": 1, "row": 1 },
-    { "id": "B3", "label": "B3", "col": 2, "row": 1 }
+    { "id": "1520-W", "label": "1520 West", "x": 122, "y": 95, "w": 115, "h": 334 },
+    { "id": "1520-N", "label": "1520 North", "x": 237, "y": 131, "w": 201, "h": 149 },
+    { "id": "1520-S", "label": "1520 South", "x": 237, "y": 280, "w": 201, "h": 149 },
+    { "id": "1520-A", "label": "1520 Alcove", "x": 231, "y": 429, "w": 184, "h": 59 },
+    { "id": "1522", "label": "1522 Seminar Room", "x": 14, "y": 73, "w": 108, "h": 184 },
+    { "id": "1533", "label": "1533 Data Tech Lab", "x": 237, "y": 20, "w": 201, "h": 111 }
   ]
 }

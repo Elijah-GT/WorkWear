@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
   checkNewFalls, dotLabel, formatAgo, formatClock, formatReading, hazardView, heatInfo, heatLevelFor,
   incidentBadges, incidentPlace, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout,
-  namePatch, notesPatch, reportBody, statusActions, summarize, zoneHeatView, zoneOptions, zonePatch,
+  namePatch, notesPatch, reportBody, statusActions, summarize, zoneHeatView, zoneName, zoneOptions, zonePatch,
 } from "../logic.js";
 
 test("isSimulated only matches the sim- prefix", () => {
@@ -131,6 +132,16 @@ test("incidentPlace shows the zone and GPS when present", () => {
   assert.equal(incidentPlace(inc({ lat: 45.123456, lon: -122.5 })), "Zone A2 · GPS 45.12346, -122.50000");
 });
 
+test("incidentPlace and zoneName use the zones.json label when there is one", () => {
+  const cfg = { zones: [{ id: "A2", label: "1520 West" }, { id: "B1" }, { id: "B2", label: "" }] };
+  assert.equal(incidentPlace(inc(), cfg), "Zone 1520 West");
+  assert.equal(zoneName(cfg, "B1"), "B1");      // no label
+  assert.equal(zoneName(cfg, "B2"), "B2");      // empty label
+  assert.equal(zoneName(cfg, "Z9"), "Z9");      // not in the file (an old zone)
+  assert.equal(zoneName(null, "A2"), "A2");     // file not loaded
+  assert.equal(zoneName({ zones: "oops" }, "A2"), "A2");
+});
+
 test("formatClock shows time today and adds the date for older incidents", () => {
   const opts = { locale: "en-GB", timeZone: "UTC" };
   const now = Date.parse("2026-11-06T15:10:06.000Z");
@@ -251,16 +262,95 @@ test("heatLevelFor uses the protocol bands", () => {
 });
 
 test("hazardView: shade by confirmed count, say when sample data is included", () => {
-  assert.deepEqual(hazardView(undefined), { shade: 0, text: "No confirmed incidents" });
-  assert.deepEqual(hazardView({ confirmed_count: 0, sample_count: 0 }), { shade: 0, text: "No confirmed incidents" });
-  assert.deepEqual(hazardView({ confirmed_count: 1, sample_count: 0 }), { shade: 1, text: "1 confirmed incident" });
+  const none = { shade: 0, text: "No confirmed incidents", badge: null };
+  assert.deepEqual(hazardView(undefined), none);
+  assert.deepEqual(hazardView({ confirmed_count: 0, sample_count: 0 }), none);
+  assert.deepEqual(hazardView({ confirmed_count: 1, sample_count: 0 }),
+    { shade: 1, text: "1 confirmed incident", badge: "1 incident" });
   assert.deepEqual(hazardView({ confirmed_count: 2, sample_count: 2 }),
-    { shade: 2, text: "2 confirmed incidents (includes 2 sample)" });
+    { shade: 2, text: "2 confirmed incidents (includes 2 sample)", badge: "2 incidents · sample" });
+  assert.deepEqual(hazardView({ confirmed_count: 3, sample_count: 1 }),
+    { shade: 3, text: "3 confirmed incidents (includes 1 sample)", badge: "3 incidents · incl. sample" });
   assert.equal(hazardView({ confirmed_count: 9, sample_count: 0 }).shade, 3);
 });
 
 test("zoneHeatView shows the highest heat index in the window", () => {
-  assert.deepEqual(zoneHeatView({ max_heat_index_c: 33.26 }), { level: "extreme_caution", text: "Max heat index 33.3 °C (Extreme caution)" });
-  assert.deepEqual(zoneHeatView({ max_heat_index_c: null }), { level: null, text: "No heat readings" });
-  assert.deepEqual(zoneHeatView(undefined), { level: null, text: "No heat readings" });
+  assert.deepEqual(zoneHeatView({ max_heat_index_c: 33.26 }), {
+    level: "extreme_caution", text: "Max heat index 33.3 °C (Extreme caution)", badge: "33.3 °C · Extreme caution",
+  });
+  const none = { level: null, text: "No heat readings", badge: null };
+  assert.deepEqual(zoneHeatView({ max_heat_index_c: null }), none);
+  assert.deepEqual(zoneHeatView(undefined), none);
+});
+
+// --- Floor-plan map -----------------------------------------------------------
+
+const plan = {
+  image: "floorplan.png", width: 500, height: 400,
+  zones: [
+    { id: "W", label: "West", x: 0, y: 0, w: 250, h: 400 },
+    { id: "E", x: 250, y: 100, w: 250, h: 300 },
+  ],
+};
+
+test("mapLayout with a floor plan places zones in percent of the image", () => {
+  const m = mapLayout(plan, [dev("h1", "E", "Bo"), dev("h2", null)]);
+  assert.equal(m.mode, "plan");
+  assert.equal(m.image, "floorplan.png");
+  assert.deepEqual([m.width, m.height], [500, 400]);
+  assert.deepEqual(m.cells.map(({ workers, ...c }) => ({ ...c, workers: workers.map((w) => w.name) })), [
+    { id: "W", label: "West", left: 0, top: 0, width: 50, height: 100, workers: [] },
+    { id: "E", label: "E", left: 50, top: 25, width: 50, height: 75, workers: ["Bo"] },
+  ]);
+  assert.deepEqual(m.offMap.map((w) => w.device_id), ["h2"]);
+  assert.deepEqual(m.problems, []);
+});
+
+test("mapLayout keeps percentages to 3 decimals", () => {
+  const m = mapLayout({ image: "p.png", width: 555, height: 505, zones: [{ id: "Z", x: 122, y: 95, w: 115, h: 334 }] }, []);
+  assert.deepEqual(m.cells[0], { id: "Z", label: "Z", left: 21.982, top: 18.812, width: 20.721, height: 66.139, workers: [] });
+});
+
+test("mapLayout reports floor-plan zones that are missing numbers or outside the image", () => {
+  const bad = { ...plan, zones: [
+    { id: "ok", x: 0, y: 0, w: 10, h: 10 },
+    { id: "wide", x: 400, y: 0, w: 200, h: 10 },   // runs off the right edge
+    { id: "neg", x: -1, y: 0, w: 10, h: 10 },
+    { id: "flat", x: 0, y: 0, w: 10, h: 0 },
+    { id: "text", x: "0", y: 0, w: 10, h: 10 },
+    { id: "grid", col: 0, row: 0 },                  // grid fields in a plan file
+  ] };
+  const m = mapLayout(bad, [dev("h1", "wide")]);
+  assert.deepEqual(m.cells.map((c) => c.id), ["ok"]);
+  assert.equal(m.problems.length, 5);
+  assert.match(m.problems[0], /wide needs x, y, w, h inside the 500 x 400 plan/);
+  assert.deepEqual(m.offMap.map((w) => w.device_id), ["h1"]);
+});
+
+test("mapLayout says once when a floor plan has no width or height", () => {
+  const m = mapLayout({ image: "p.png", zones: plan.zones }, [dev("h1", "W")]);
+  assert.deepEqual(m.cells, []);
+  assert.deepEqual(m.problems, ["Add the floor plan's width and height in pixels"]);
+  assert.equal(m.offMap.length, 1);
+});
+
+test("mapLayout still draws a grid when there is no image", () => {
+  const m = mapLayout(grid, []);
+  assert.equal(m.mode, "grid");
+  assert.equal(m.image, null);
+  assert.equal(m.cells.length, 2);
+});
+
+test("the shipped zones.json is a valid floor plan with labeled zones", () => {
+  const cfg = JSON.parse(readFileSync(new URL("../zones.json", import.meta.url), "utf8"));
+  const m = mapLayout(cfg, []);
+  assert.equal(m.mode, "plan");
+  assert.deepEqual(m.problems, []);
+  assert.equal(m.cells.length, cfg.zones.length);
+  readFileSync(new URL(`../${cfg.image}`, import.meta.url)); // the image exists
+  for (const z of cfg.zones) {
+    assert.ok(z.label && z.label !== z.id, `zone ${z.id} has a readable label`);
+    assert.ok(z.id.length <= 32, `zone ${z.id} fits the server's 32-character limit`);
+    assert.ok(!/\s/.test(z.id), `zone ${z.id} has no spaces`);
+  }
 });

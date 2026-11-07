@@ -124,8 +124,15 @@ export function incidentWho(inc) {
   return name || dev || "Manual report";
 }
 
-export function incidentPlace(inc) {
-  const zone = inc.zone ? `Zone ${inc.zone}` : "No zone";
+// A zone's display name from zones.json ("1520 West"), or its ID when the file has no label.
+export function zoneName(zonesConfig, id) {
+  const zones = Array.isArray(zonesConfig?.zones) ? zonesConfig.zones : [];
+  const z = zones.find((zone) => zone?.id === id);
+  return typeof z?.label === "string" && z.label ? z.label : id;
+}
+
+export function incidentPlace(inc, zonesConfig = null) {
+  const zone = inc.zone ? `Zone ${zoneName(zonesConfig, inc.zone)}` : "No zone";
   if (inc.lat == null || inc.lon == null) return zone;
   return `${zone} · GPS ${inc.lat.toFixed(5)}, ${inc.lon.toFixed(5)}`;
 }
@@ -164,22 +171,45 @@ export function checkNewFalls(incidents, baseline) {
 
 const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
-// Places workers on the zone grid from dashboard/zones.json. Workers with no zone, or a zone
-// that is not in the file, go in offMap. Bad entries in the file are skipped and listed in
-// problems so the page can say what is wrong instead of drawing a broken map.
+const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+const positive = (v) => (isNum(v) && v > 0 ? v : 0);
+const pct = (part, whole) => Math.round((part / whole) * 100000) / 1000; // percent, 3 decimals
+
+// Places workers on the site map from dashboard/zones.json. Two kinds of map:
+// - plan: zones.json has "image" (a floor plan), "width" and "height" (its size in pixels), and
+//   each zone is a rectangle x, y, w, h in those pixels. Cells get left/top/width/height in %.
+// - grid: zones.json has "cols" and "rows", and each zone a "col" and "row" (0 = top left).
+// Workers with no zone, or a zone not in the file, go in offMap. Bad entries are skipped and
+// listed in problems, so the page can say what is wrong instead of drawing a broken map.
 export function mapLayout(zonesConfig, devices) {
-  const cols = Number.isInteger(zonesConfig?.cols) && zonesConfig.cols > 0 ? zonesConfig.cols : 0;
-  const rows = Number.isInteger(zonesConfig?.rows) && zonesConfig.rows > 0 ? zonesConfig.rows : 0;
+  const plan = typeof zonesConfig?.image === "string" && zonesConfig.image !== "";
+  const width = plan ? positive(zonesConfig.width) : 0;
+  const height = plan ? positive(zonesConfig.height) : 0;
+  const cols = !plan && Number.isInteger(zonesConfig?.cols) && zonesConfig.cols > 0 ? zonesConfig.cols : 0;
+  const rows = !plan && Number.isInteger(zonesConfig?.rows) && zonesConfig.rows > 0 ? zonesConfig.rows : 0;
   const problems = [];
+  if (plan && (!width || !height)) problems.push("Add the floor plan's width and height in pixels");
   const cells = [];
   const byId = new Map();
-  for (const z of zonesConfig?.zones ?? []) {
+  const zones = Array.isArray(zonesConfig?.zones) ? zonesConfig.zones : [];
+  for (const z of zones) {
     if (typeof z?.id !== "string" || !z.id) { problems.push("A zone has no id"); continue; }
     if (byId.has(z.id)) { problems.push(`Zone ${z.id} is listed twice`); continue; }
-    const inGrid = Number.isInteger(z.col) && Number.isInteger(z.row)
-      && z.col >= 0 && z.col < cols && z.row >= 0 && z.row < rows;
-    if (!inGrid) { problems.push(`Zone ${z.id} is outside the ${cols} x ${rows} grid`); continue; }
-    const cell = { id: z.id, label: z.label ?? z.id, col: z.col, row: z.row, workers: [] };
+    const label = typeof z.label === "string" && z.label ? z.label : z.id;
+    let cell;
+    if (plan) {
+      if (!width || !height) continue; // already reported once above
+      const inside = [z.x, z.y, z.w, z.h].every(isNum) && z.w > 0 && z.h > 0
+        && z.x >= 0 && z.y >= 0 && z.x + z.w <= width && z.y + z.h <= height;
+      if (!inside) { problems.push(`Zone ${z.id} needs x, y, w, h inside the ${width} x ${height} plan`); continue; }
+      cell = { id: z.id, label, left: pct(z.x, width), top: pct(z.y, height),
+        width: pct(z.w, width), height: pct(z.h, height), workers: [] };
+    } else {
+      const inGrid = Number.isInteger(z.col) && Number.isInteger(z.row)
+        && z.col >= 0 && z.col < cols && z.row >= 0 && z.row < rows;
+      if (!inGrid) { problems.push(`Zone ${z.id} is outside the ${cols} x ${rows} grid`); continue; }
+      cell = { id: z.id, label, col: z.col, row: z.row, workers: [] };
+    }
     byId.set(z.id, cell);
     cells.push(cell);
   }
@@ -190,7 +220,10 @@ export function mapLayout(zonesConfig, devices) {
   }
   for (const c of cells) c.workers.sort(byName);
   offMap.sort(byName);
-  return { cols, rows, cells, offMap, problems };
+  return {
+    mode: plan ? "plan" : "grid", image: plan ? zonesConfig.image : null,
+    width, height, cols, rows, cells, offMap, problems,
+  };
 }
 
 // Text for a worker's dot on the map (also its tooltip), so the color is never the only cue.
@@ -258,17 +291,29 @@ export function heatLevelFor(hi) {
 }
 
 // Incident layer for one zone of GET /api/hazards. Only confirmed incidents count. shade 0-3.
+// text is the full description (tooltip, screen readers); badge is the short tag drawn on the
+// map, or null when there is nothing to show, so empty zones stay quiet.
 export function hazardView(entry) {
   const n = entry?.confirmed_count ?? 0;
-  if (n === 0) return { shade: 0, text: "No confirmed incidents" };
-  const sample = entry.sample_count ? ` (includes ${entry.sample_count} sample)` : "";
-  return { shade: Math.min(n, 3), text: `${n} confirmed incident${n === 1 ? "" : "s"}${sample}` };
+  if (n === 0) return { shade: 0, text: "No confirmed incidents", badge: null };
+  const s = entry.sample_count ?? 0;
+  const sample = s ? ` (includes ${s} sample)` : "";
+  const tag = s === 0 ? "" : s >= n ? " · sample" : " · incl. sample";
+  return {
+    shade: Math.min(n, 3),
+    text: `${n} confirmed incident${n === 1 ? "" : "s"}${sample}`,
+    badge: `${n} incident${n === 1 ? "" : "s"}${tag}`,
+  };
 }
 
 // Heat layer for one zone: the highest heat index seen there in the time window.
 export function zoneHeatView(entry) {
   const hi = entry?.max_heat_index_c ?? null;
-  if (hi == null) return { level: null, text: "No heat readings" };
+  if (hi == null) return { level: null, text: "No heat readings", badge: null };
   const level = heatLevelFor(hi);
-  return { level, text: `Max heat index ${fmt1(hi)} °C (${heatInfo(level).label})` };
+  return {
+    level,
+    text: `Max heat index ${fmt1(hi)} °C (${heatInfo(level).label})`,
+    badge: `${fmt1(hi)} °C · ${heatInfo(level).label}`,
+  };
 }

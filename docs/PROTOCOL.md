@@ -14,7 +14,7 @@ This file is the single source of truth for every message between the helmet, th
 - **Zone:** firmware always sends `"zone": null`. The server replaces it with the zone assigned to that device on the dashboard (section 4). The field stays in the payload so later firmware could report its own zone.
 - **Device IDs:** `helmet-01`, `helmet-02`, and so on, set in `firmware/config.h`. The server creates a device the first time it hears from a new `device_id`.
 - **Simulated devices:** the simulator (`server/simulator.py`) uses IDs starting with `sim-` (for example `sim-01`). Every incident from a `sim-` device gets `sample: true`, so the dashboard labels it "sample data". Real helmets must never use the `sim-` prefix.
-- **Zone IDs:** short strings that match the floor-plan image, for example `A1`, `A2`, `B1`. The dashboard's floor-plan config defines the list.
+- **Zone IDs:** short strings (up to 32 characters, no spaces) that match the floor-plan image, for example `1520-W` or `1522`. The dashboard's floor-plan config (`dashboard/zones.json`) defines the list and a display label for each. Examples elsewhere in this file use `A2` and `B1`; any ID works the same way.
 
 ### Responses
 
@@ -204,3 +204,4 @@ The server maps `heat_index_c` to `heat_level` using the NWS heat index bands. T
 | 2026-11-06 | Added optional `sent_uptime_ms` to fall events and based `delayed` on it. Added the `sim-` device ID rule (incidents marked `sample: true`). |
 | 2026-11-06 | S3: added `sample_count` to `GET /api/hazards`; spelled out manual-report rules (known device, name copied from the device, `sim-` reports are sample) and that `PATCH /api/incidents` status can move in any direction. |
 | 2026-11-06 | D5: noted that the dashboard's heat layer uses the same heat bands (section 7). No field changes. |
+| 2026-11-07 | D7: zone ID examples updated for the room 1520 floor plan. No field changes. |

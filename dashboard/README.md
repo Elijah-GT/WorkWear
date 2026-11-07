@@ -30,8 +30,9 @@ Three simulated helmets appear within a second. Every 30 s one of them "falls", 
 | **Alert sound** | Off when the page opens: browsers block sound until you click something. Click **Alert sound: off** to turn it on (it plays a test beep). |
 | **Tiles** | Workers online, new (unreviewed) incidents, recent incidents, simulated helmets. |
 | **Workers** | One card per helmet: name, online/offline (offline = nothing for 5 s), heat risk color and reading, helmet on/off, last seen. **Click the name to rename** (Enter saves, Esc cancels). **Pick a zone** from the list to say where the worker is. Both are saved on the server, and new incidents use the name and zone at that moment. |
-| **Site map** | The zone grid from `zones.json`. A dot per worker in their zone, colored by heat risk. A worker with a new fall gets a red ring until the alert is hidden. Workers without a zone are listed under "Not on the map". |
-| **Map layers** | **Incidents** shades each zone by its number of **confirmed** incidents (darker = more). **Heat** colors each zone by the highest heat index measured there. **Time** limits both to the last 24 h, 8 h, or hour. |
+| **Site map** | The floor plan of room 1520 (from `zones.json`) with its zones drawn on it. A dot per worker in their zone, colored by heat risk. Workers without a zone are listed under "Not on the map". |
+| **New fall on the map** | The zone gets a thick **pulsing red outline** and a **NEW FALL** tag, and the worker's dot pulses. This is never a fill, so a live fall can't be mistaken for a past hazard. It lasts until the alert is hidden or the fall is confirmed or dismissed. |
+| **Map layers** | **Incidents** fills each zone **red** by its number of **confirmed** incidents (light, medium, dark = 1, 2, 3 or more) with a count tag. Confirming a fall turns its zone's outline into a red fill. **Heat** tints each zone in the heat-risk color of the highest heat index measured there. **Time** limits both to the last 24 h, 8 h, or hour. Hover a zone for the full text. |
 | **Incidents** | Newest first, with badges: New / Confirmed / Dismissed, Sample data, Arrived late. **Confirm** a real incident, **Dismiss** a false alarm, or **Mark new** to undo. Add or edit a note on any incident. Confirming or dismissing a fall also clears its alert. |
 | **Report injury or hazard** | For things the helmet cannot detect, such as a cut hand or a wet floor. Pick the type and zone, and optionally the helmet (its name is copied) or a typed name. Reports start as New; confirm them for them to count on the map. |
 
@@ -44,30 +45,35 @@ These labels keep the demo honest (see "Honesty rules" in [`CLAUDE.md`](../CLAUD
 | Label | Meaning |
 |---|---|
 | **Simulated helmet** | The device ID starts with `sim-`: it is the simulator, not hardware. |
-| **Sample data** | An incident from a simulated helmet. Zone counts on the map say "(includes N sample)" when they contain any. |
+| **Sample data** | An incident from a simulated helmet. Zone tags on the map say "sample" (or "incl. sample") when their count contains any. |
 | **Simulated location** | Zones are set by hand on the worker cards; nothing measures where the worker is. |
 | **Heat risk** | Based on air temperature and humidity at the helmet (the heat index), **not** body temperature. Colors follow the bands in [`docs/PROTOCOL.md`](../docs/PROTOCOL.md) section 7. |
 | **Arrived late** | The helmet held the fall while its Wi-Fi was down and sent it more than 5 s later. The time shown is when the server got it. |
 
 ## 4. Change the site map
 
-Edit [`zones.json`](zones.json). The default is a generic 3 x 2 grid:
+Edit [`zones.json`](zones.json). It points at a floor-plan image and draws each zone as a rectangle on it:
 
 ```json
 {
-  "site": "Demo site (generic grid)",
-  "cols": 3,
-  "rows": 2,
+  "site": "Room 1520, Carlsen Center for Innovation and Entrepreneurship",
+  "image": "floorplan.png",
+  "width": 555,
+  "height": 505,
   "zones": [
-    { "id": "A1", "label": "A1", "col": 0, "row": 0 },
-    { "id": "B3", "label": "B3", "col": 2, "row": 1 }
+    { "id": "1520-W", "label": "1520 West", "x": 122, "y": 95, "w": 115, "h": 334 },
+    { "id": "1522", "label": "1522 Seminar Room", "x": 14, "y": 73, "w": 108, "h": 184 }
   ]
 }
 ```
 
-- `id` is what is stored on the server. `label` is what the map shows (e.g. `"Stairwell"`). `col` and `row` count from 0, top left.
-- A zone can be left out to leave a gap. Reload the page after editing.
-- Mistakes (duplicate IDs, a zone outside the grid) are skipped and listed above the map.
+- `image` is a file in `dashboard/`. `width` and `height` are its size in pixels.
+- `x`, `y` are a zone's top-left corner and `w`, `h` its size, **in the image's pixels** (measure them in any image editor). The zones follow the image when the page resizes.
+- `id` is what is stored on the server (up to 32 characters, no spaces). `label` is what the map, the zone pickers, and the incident list show.
+- The zones today: room 1520 is split into **West, North, South, and Alcove**, plus the **1522 Seminar Room** and **1533 Data Tech Lab**. The small offices (1527 to 1531) are on the plan but are not zones; add one with a new line.
+- `floorplan.png` is the building plan with the room names inside the zones and the outdoor labels removed, so they don't clash with the zone labels.
+- No floor plan? Leave out `image`, `width`, and `height` and use a grid instead: `"cols": 3, "rows": 2`, and give each zone a `"col"` and `"row"` (from 0, top left).
+- Mistakes (duplicate IDs, a zone outside the image or grid, a missing image) are skipped and listed above the map. Reload the page after editing.
 - If you rename or remove an `id`, workers already set to the old one show under "Not on the map" until you pick a new zone. Their past incidents keep the old zone.
 
 ## 5. Run the tests
@@ -102,6 +108,7 @@ dashboard/
   app.js              loads data every second and draws the page
   logic.js            decisions without the page (tested)
   api.js              talks to the server (2 s timeout)
-  zones.json          the site map grid
+  zones.json          the site map: floor plan and zones
+  floorplan.png       floor plan of room 1520 used by zones.json
   tests/logic.test.js node --test tests
 ```

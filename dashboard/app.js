@@ -43,9 +43,10 @@ function el(tag, className, text) {
 async function loadZones() {
   try {
     state.zones = await getJSON("zones.json");
-    setText("site-name", state.zones.site);
+    setText("site-name", state.zones.site ? `${state.zones.site}.` : "");
   } catch (err) {
-    setText("site-name", `Could not load zones.json: ${err.message}`);
+    setText("site-name", `Could not load zones.json (${err.message}); retrying.`);
+    setTimeout(loadZones, 5000); // the rest of the page keeps refreshing meanwhile
   }
   render();
 }
@@ -295,7 +296,7 @@ function renderAlert() {
   const fall = state.alerts[0];
   setText("alert-title", `FALL: ${incidentWho(fall)}`);
   const peak = fall.peak_g != null ? ` · peak ${fall.peak_g} g` : "";
-  setText("alert-detail", `${incidentPlace(fall)} · ${formatClock(fall.ts, Date.now())}${peak}`);
+  setText("alert-detail", `${incidentPlace(fall, state.zones)} · ${formatClock(fall.ts, Date.now())}${peak}`);
   const key = JSON.stringify(incidentBadges(fall));
   if ($("alert-badges").dataset.key !== key) {
     $("alert-badges").replaceChildren(...badgeEls(incidentBadges(fall)));
@@ -462,7 +463,8 @@ function updateRow(row, inc, now, alerting) {
     row.badgeKey = key;
   }
   setText(row.who, incidentWho(inc));
-  setText(row.place, inc.peak_g != null ? `${incidentPlace(inc)} · peak ${inc.peak_g} g` : incidentPlace(inc));
+  const place = incidentPlace(inc, state.zones);
+  setText(row.place, inc.peak_g != null ? `${place} · peak ${inc.peak_g} g` : place);
   setText(row.time, formatClock(inc.ts, now));
   setText(row.notes, inc.notes ? `Notes: ${inc.notes}` : "");
   row.notes.hidden = !inc.notes;
@@ -586,37 +588,58 @@ form.addEventListener("submit", async (e) => {
 // to its zone's cell when the zone changes, so it moves on the next refresh (within ~1 s).
 
 const dots = new Map(); // device_id -> { root, swatch, name }
-let mapKey = null;      // rebuild the grid only when zones.json gives a different layout
-const zoneLists = new Map(); // zone id -> { cell, list, count }
+let mapKey = null;      // rebuild the map only when zones.json gives a different layout
+const zoneLists = new Map(); // zone id -> { cell, list, count, layer }
+let planImageFailed = false;
 
 function buildGrid(layout) {
   const map = $("map");
   zoneLists.clear();
+  map.style.gridTemplateColumns = "";
+  map.style.aspectRatio = "";
   if (layout.cells.length === 0) {
     map.className = "map empty";
-    map.style.gridTemplateColumns = "";
     map.replaceChildren(el("p", null, state.zones
       ? "zones.json has no usable zones, so there is no map."
       : "No map: zones.json could not be loaded."));
     return;
   }
-  map.className = "map";
-  map.style.gridTemplateColumns = `repeat(${layout.cols}, minmax(0, 1fr))`;
-  map.replaceChildren(...layout.cells.map((c) => {
+  const plan = layout.mode === "plan";
+  const parts = [];
+  if (plan) {
+    // Floor plan: the image fills the box, and zones sit on it at their % positions.
+    map.className = "map map--plan";
+    map.style.aspectRatio = `${layout.width} / ${layout.height}`;
+    planImageFailed = false;
+    const img = el("img", "map__img");
+    img.alt = ""; // decorative: the zones below carry the names
+    img.addEventListener("error", () => { planImageFailed = true; renderMap(); });
+    img.src = layout.image;
+    parts.push(img);
+  } else {
+    map.className = "map";
+    map.style.gridTemplateColumns = `repeat(${layout.cols}, minmax(0, 1fr))`;
+  }
+  for (const c of layout.cells) {
     const cell = el("section", "zone");
     cell.dataset.zone = c.id;
-    cell.style.gridColumn = String(c.col + 1);
-    cell.style.gridRow = String(c.row + 1);
+    if (plan) {
+      Object.assign(cell.style, { left: `${c.left}%`, top: `${c.top}%`, width: `${c.width}%`, height: `${c.height}%` });
+    } else {
+      cell.style.gridColumn = String(c.col + 1);
+      cell.style.gridRow = String(c.row + 1);
+    }
     const head = el("div", "zone__head");
     const count = el("span", "zone__count");
-    head.append(el("strong", "zone__label", c.label), count);
-    const layer = el("div", "zone__layer");
+    head.append(el("strong", "zone__label", c.label), el("span", "zone__fall", "New fall"), count);
+    const layer = el("span", "zone__layer");
     const list = el("ul", "dots");
     list.setAttribute("aria-label", `Workers in zone ${c.label}`);
     cell.append(head, layer, list);
     zoneLists.set(c.id, { cell, list, count, layer });
-    return cell;
-  }));
+    parts.push(cell);
+  }
+  map.replaceChildren(...parts);
 }
 
 function buildDot() {
@@ -645,12 +668,15 @@ function placeDots(list, workers, fallen) {
 
 function renderMap() {
   const layout = mapLayout(state.zones, state.devices);
-  const key = JSON.stringify([layout.cols, layout.rows, layout.cells.map((c) => [c.id, c.label, c.col, c.row]), !!state.zones]);
+  const key = JSON.stringify([layout.mode, layout.image, layout.width, layout.height, layout.cols, layout.rows,
+    layout.cells.map((c) => [c.id, c.label, c.col, c.row, c.left, c.top, c.width, c.height]), !!state.zones]);
   if (key !== mapKey) { buildGrid(layout); mapKey = key; }
 
   const problems = $("map-problems");
-  problems.hidden = layout.problems.length === 0;
-  setText(problems, layout.problems.length ? `Check dashboard/zones.json: ${layout.problems.join("; ")}.` : "");
+  const issues = [...layout.problems];
+  if (layout.mode === "plan" && planImageFailed) issues.push(`the floor plan image "${layout.image}" could not be loaded`);
+  problems.hidden = issues.length === 0;
+  setText(problems, issues.length ? `Check dashboard/zones.json: ${issues.join("; ")}.` : "");
 
   const fallen = new Set(state.alerts.map((a) => a.device_id));
   const hazards = new Map(state.hazards.map((h) => [h.zone, h]));
@@ -659,29 +685,25 @@ function renderMap() {
     const z = zoneLists.get(c.id);
     if (!z) continue;
     placeDots(z.list, c.workers, fallen);
-    setText(z.count, c.workers.length === 1 ? "1 worker" : `${c.workers.length} workers`);
-    z.cell.classList.toggle("zone--fall", c.workers.some((d) => fallen.has(d.device_id)));
-    // Layer (D5): confirmed incidents shade the zone, or heat colors it.
+    const workers = c.workers.length === 1 ? "1 worker" : `${c.workers.length} workers`;
+    setText(z.count, workers);
+    const hasFall = c.workers.some((d) => fallen.has(d.device_id));
+    // Layer (D5): confirmed incidents fill the zone red, or heat colors it. A new fall is an
+    // outline and a "New fall" tag, never a fill, so it can't be mistaken for a past hazard.
     const h = hazards.get(c.id);
     sample += h?.sample_count ?? 0;
-    let cls = "zone";
-    let text;
-    if (state.layer === "heat") {
-      const v = zoneHeatView(h);
-      cls += ` zone--heat zone--heat-${v.level ?? "none"}`;
-      text = v.text;
-    } else {
-      const v = hazardView(h);
-      cls += ` zone--shade-${v.shade}`;
-      text = v.text;
-    }
-    if (z.cell.classList.contains("zone--fall")) cls += " zone--fall";
+    const v = state.layer === "heat" ? zoneHeatView(h) : hazardView(h);
+    let cls = state.layer === "heat" ? `zone zone--heat zone--heat-${v.level ?? "none"}` : `zone zone--shade-${v.shade}`;
+    if (hasFall) cls += " zone--fall";
     if (z.cell.className !== cls) z.cell.className = cls;
-    setText(z.layer, text);
+    setText(z.layer, v.badge ?? "");
+    const label = `${c.label}: ${hasFall ? "NEW FALL, " : ""}${v.text}, ${workers}`;
+    if (z.cell.title !== label) { z.cell.title = label; z.cell.setAttribute("aria-label", label); }
   }
+  $("legend-incidents").hidden = state.layer === "heat";
   setText("map-layer-note", state.layer === "heat"
-    ? "Colored by the highest heat index measured in each zone (heat risk from air conditions, not body temperature)."
-    : `Shaded by confirmed incidents (falls and reports). New and dismissed incidents do not count.${
+    ? "Colored by the highest heat index measured in each zone, in the same colors as the worker dots (heat risk from air conditions, not body temperature)."
+    : `Red fill = confirmed incidents (falls and reports), darker = more. New and dismissed incidents do not count.${
       sample ? " Counts include sample data from simulated helmets." : ""}`);
   placeDots($("map-off"), layout.offMap, fallen);
   $("map-off").parentElement.hidden = layout.offMap.length === 0;

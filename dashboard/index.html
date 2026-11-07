@@ -70,7 +70,15 @@
         <h3 class="map__offtitle">Not on the map</h3>
         <ul id="map-off" class="dots" aria-label="Workers with no zone on the map"></ul>
       </div>
-      <ul class="legend" aria-label="Heat risk colors">
+      <ul class="legend" id="legend-incidents" aria-label="Zone colors">
+        <li class="legend__title">Zones:</li>
+        <li><span class="legend__zone legend__zone--shade-1"></span>1 confirmed incident</li>
+        <li><span class="legend__zone legend__zone--shade-2"></span>2</li>
+        <li><span class="legend__zone legend__zone--shade-3"></span>3 or more</li>
+        <li><span class="legend__zone legend__zone--fall"></span>New fall, not reviewed yet</li>
+      </ul>
+      <ul class="legend" aria-label="Worker dot colors">
+        <li class="legend__title">Worker heat risk:</li>
         <li><span class="dot__swatch heat--normal"></span>Normal</li>
         <li><span class="dot__swatch heat--caution"></span>Caution</li>
         <li><span class="dot__swatch heat--extreme-caution"></span>Extreme caution</li>

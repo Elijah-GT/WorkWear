@@ -19,6 +19,13 @@
   --heat-extreme-danger: #7a0d0d;
   --heat-none: #9aa0aa;
 
+  /* Hazard map: confirmed incidents fill a zone red, darker = more */
+  --hazard-1: rgb(211 47 47 / 0.2);
+  --hazard-2: rgb(211 47 47 / 0.38);
+  --hazard-3: rgb(211 47 47 / 0.56);
+  --hazard-edge-1: rgb(179 38 30 / 0.6);
+  --hazard-edge-2: rgb(179 38 30 / 0.8);
+
   --radius: 10px;
   --gap: 16px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -195,10 +202,31 @@ h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap
   border: 2px solid var(--border); border-radius: 8px; padding: 8px; min-height: 110px; min-width: 0;
   background: #fafbfc; display: flex; flex-direction: column; gap: 6px; transition: border-color 0.2s, background 0.2s;
 }
-.zone--fall { border-color: var(--bad); background: #fde8e7; }
 .zone__head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .zone__label { font-size: 1.05rem; }
 .zone__count { color: var(--muted); font-size: 0.8rem; }
+
+/* Floor-plan map: the image fills the box (its aspect ratio is set from zones.json) and each
+   zone is placed on it in %. Content that does not fit a small room spills over rather than
+   being hidden, so a worker is never cut off the map. */
+.map--plan { display: block; position: relative; width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
+.map__img { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.55; pointer-events: none; user-select: none; }
+.map--plan .zone {
+  position: absolute; min-height: 0; padding: 4px; border-radius: 4px;
+  border: 2px dashed rgb(31 95 191 / 0.45); background: transparent;
+  flex-direction: row; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: 4px;
+}
+.map--plan .zone__head { display: contents; }
+.map--plan .zone__label { font-size: 0.8rem; background: rgb(255 255 255 / 0.92); border-radius: 6px; padding: 1px 6px; line-height: 1.3; }
+.map--plan .zone__count { display: none; } /* the dots show who is there */
+.map--plan .dot { font-size: 0.8rem; padding: 2px 8px 2px 3px; }
+.map--plan .dot__swatch { width: 14px; height: 14px; }
+@media (max-width: 500px) {
+  .map--plan .zone { padding: 2px; gap: 2px; }
+  .map--plan .zone__label { font-size: 0.66rem; padding: 0 4px; }
+  .map--plan .dot { font-size: 0.68rem; padding: 1px 5px 1px 2px; gap: 3px; }
+  .map--plan .dot__swatch { width: 10px; height: 10px; border-width: 1px; }
+}
 
 .dots { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .dot {
@@ -276,19 +304,47 @@ h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap
 .seg__btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
 .seg__btn:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
 
-.zone__layer { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
-/* Incident layer: more confirmed incidents, darker red */
-.zone--shade-1 { background: #fbe3e1; border-color: #f0b4ae; }
-.zone--shade-2 { background: #f6c4bf; border-color: #e3867d; }
-.zone--shade-3 { background: #ee9d95; border-color: var(--bad); }
-.zone--shade-1 .zone__layer, .zone--shade-2 .zone__layer, .zone--shade-3 .zone__layer { color: #7a1610; }
-/* Heat layer: thick top edge in the heat color, light tint */
-.zone--heat { border-top-width: 10px; }
-.zone--heat-normal { border-top-color: var(--heat-normal); background: #eaf6ee; }
-.zone--heat-caution { border-top-color: var(--heat-caution); background: #fdf6dc; }
-.zone--heat-extreme_caution { border-top-color: var(--heat-extreme-caution); background: #fdecdb; }
-.zone--heat-danger { border-top-color: var(--heat-danger); background: #fadedd; }
-.zone--heat-extreme_danger { border-top-color: var(--heat-extreme-danger); background: #f1d6d6; }
-.zone--heat-none { border-top-color: var(--heat-none); }
-/* A new fall outline wins over either layer */
-.zone.zone--fall { border-color: var(--bad); box-shadow: 0 0 0 2px var(--bad); }
+/* Map layers. The badge is the short text drawn on a zone; empty zones show none. */
+.zone__layer { font-size: 0.78rem; font-weight: 700; border-radius: 6px; padding: 1px 7px; line-height: 1.35; align-self: flex-start; }
+.zone__layer:empty { display: none; }
+/* Incidents layer: confirmed incidents fill the zone red, darker = more */
+.zone.zone--shade-1 { background: var(--hazard-1); border: 2px solid var(--hazard-edge-1); }
+.zone.zone--shade-2 { background: var(--hazard-2); border: 2px solid var(--hazard-edge-2); }
+.zone.zone--shade-3 { background: var(--hazard-3); border: 2px solid var(--bad); }
+.zone--shade-1 .zone__layer, .zone--shade-2 .zone__layer, .zone--shade-3 .zone__layer { background: var(--bad); color: #fff; }
+/* Heat layer: the zone is tinted in its heat-risk color (same colors as the worker dots) */
+.zone--heat .zone__layer { background: #fff; color: var(--text); border: 1px solid var(--border); }
+.zone.zone--heat-normal { background: rgb(46 158 79 / 0.22); border: 2px solid var(--heat-normal); }
+.zone.zone--heat-caution { background: rgb(224 177 0 / 0.3); border: 2px solid var(--heat-caution); }
+.zone.zone--heat-extreme_caution { background: rgb(236 122 8 / 0.3); border: 2px solid var(--heat-extreme-caution); }
+.zone.zone--heat-danger { background: rgb(208 49 45 / 0.32); border: 2px solid var(--heat-danger); }
+.zone.zone--heat-extreme_danger { background: rgb(122 13 13 / 0.42); border: 2px solid var(--heat-extreme-danger); }
+/* A new fall: thick pulsing red outline and a "New fall" tag on top of either layer. Never a
+   fill, so a live emergency can't be mistaken for a past hazard. Confirming the fall turns the
+   outline into a red fill. */
+.zone__fall {
+  display: none; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em;
+  background: #fff; color: var(--bad); border: 2px solid var(--bad); border-radius: 6px; padding: 0 5px;
+}
+@media (max-width: 500px) {
+  .map--plan .zone__layer { font-size: 0.62rem; padding: 0 4px; border-radius: 4px; }
+  .map--plan .zone__fall { font-size: 0.6rem; padding: 0 3px; border-width: 1.5px; border-radius: 4px; }
+}
+.zone--fall .zone__fall { display: inline-block; }
+.zone.zone--fall { border: 3px solid var(--bad); z-index: 2; animation: zone-pulse 1.2s ease-in-out infinite; }
+@keyframes zone-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgb(179 38 30 / 0.55); }
+  50% { box-shadow: 0 0 0 8px rgb(179 38 30 / 0.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zone.zone--fall { animation: none; box-shadow: 0 0 0 4px rgb(179 38 30 / 0.45); }
+}
+
+/* Map key */
+.legend[hidden] { display: none; }
+.legend__title { font-weight: 700; color: var(--text); }
+.legend__zone { width: 24px; height: 14px; border-radius: 3px; display: inline-block; flex: none; }
+.legend__zone--shade-1 { background: var(--hazard-1); border: 2px solid var(--hazard-edge-1); }
+.legend__zone--shade-2 { background: var(--hazard-2); border: 2px solid var(--hazard-edge-2); }
+.legend__zone--shade-3 { background: var(--hazard-3); border: 2px solid var(--bad); }
+.legend__zone--fall { border: 3px solid var(--bad); box-shadow: 0 0 0 2px rgb(179 38 30 / 0.35); }

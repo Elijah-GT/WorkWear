@@ -49,6 +49,21 @@
     <section class="panel panel--map" aria-labelledby="h-map">
       <h2 id="h-map">Site map <span class="tag tag--sim">Simulated location</span></h2>
       <p class="panel__note"><span id="site-name"></span> Zones are set by the supervisor on each worker card, not measured.</p>
+      <div class="map__controls">
+        <div id="map-layers" class="seg" role="group" aria-label="Map layer">
+          <button type="button" class="seg__btn" data-layer="incidents" aria-pressed="true">Incidents</button>
+          <button type="button" class="seg__btn" data-layer="heat" aria-pressed="false">Heat</button>
+        </div>
+        <label class="map__hours">Time
+          <select id="map-hours">
+            <option value="">All time</option>
+            <option value="24">Last 24 h</option>
+            <option value="8">Last 8 h</option>
+            <option value="1">Last hour</option>
+          </select>
+        </label>
+      </div>
+      <p class="panel__note" id="map-layer-note"></p>
       <div id="map-problems" class="map__problems" role="status" hidden></div>
       <div id="map" class="map" aria-label="Site zones"></div>
       <div class="map__off">
@@ -68,7 +83,25 @@
 
     <section class="panel panel--incidents" aria-labelledby="h-incidents">
       <h2 id="h-incidents">Incidents</h2>
-      <p class="panel__note">Newest first. Falls come from helmets; injury and hazard reports are entered by hand.</p>
+      <p class="panel__note">Newest first. Falls come from helmets; injury and hazard reports are entered by hand.
+        Confirm or dismiss each one: only confirmed incidents count on the hazard map.</p>
+      <button id="report-open" class="btn" type="button" aria-expanded="false" aria-controls="report">Report injury or hazard</button>
+      <div id="report-msg" class="report__msg" role="status"></div>
+      <form id="report" class="report" hidden novalidate>
+        <fieldset class="report__type">
+          <legend>Type</legend>
+          <label><input type="radio" name="type" value="injury_report" checked> Injury</label>
+          <label><input type="radio" name="type" value="hazard_report"> Hazard (for example a wet floor)</label>
+        </fieldset>
+        <label>Zone <select name="zone"></select></label>
+        <label>Worker (optional) <select name="device"></select></label>
+        <label id="report-name-row">Name, if not on a helmet (optional) <input name="name" maxlength="80" autocomplete="off"></label>
+        <label>Notes <textarea name="notes" rows="3" maxlength="2000"></textarea></label>
+        <div class="report__buttons">
+          <button type="submit" class="btn btn--primary">Save report</button>
+          <button type="button" id="report-cancel" class="btn">Cancel</button>
+        </div>
+      </form>
       <div id="incidents-empty" class="empty">No incidents yet.</div>
       <ol id="incidents" class="incidents" aria-label="Incidents, newest first" hidden></ol>
     </section>

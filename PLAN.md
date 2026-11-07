@@ -41,7 +41,7 @@ Laptop: server (HTTP API + SQLite) -> web dashboard
 - [ ] A4. Heat color and heat index on the dashboard change when the sensor is exposed to warmer air.
 - [ ] A5. The dashboard shows named devices, an incident list that persists after a refresh, and a location (zone) per device.
 - [ ] A6. The helmet being taken off or set down does not raise a fall alert (worn detection). If the worn sensor is cut, A6 becomes a stretch test and the firmware sends `worn: true` always; say so in the pitch.
-- [ ] A7 (stretch). Confirmed incidents appear as hazard markers or shaded zones on the map. Dismissed incidents do not.
+- [x] A7 (stretch). Confirmed incidents appear as hazard markers or shaded zones on the map. Dismissed incidents do not. *Passed 2026-11-06 with simulator and test data (D5 browser checks); recheck at the demo rehearsal.*
 
 ## 5. Workstreams and tasks
 
@@ -95,7 +95,7 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
 - [x] **D2. Workers:** cards with name, online, heat risk, worn, last seen; rename and zone picker. *Done when:* changes survive a refresh and appear on the next incident. Done 2026-11-06: 14 scripted browser checks pass (rename, zone, reload, next incident, half-typed name survives refreshes, Esc, empty name, clear zone); fits a 390 px phone width; 10 `node --test` tests. Found and fixed a server threading bug along the way (section 8).
 - [x] **D3. Incidents + fall alert:** newest-first list with sample/delayed/status badges; banner (and optional sound) for new falls. *Done when:* a simulator fall shows the banner within ~2 s; old falls don't trigger it. Done 2026-11-06: with the real simulator the banner showed 0.07 to 0.9 s after each of 4 falls reached the server; 22 scripted browser checks pass (old falls and falls already there after a reload don't alert, repeats and manual reports don't alert, late and sample badges, names shown as text, hide and show-in-list); fits 390 px; 19 `node --test` tests. The banner stays until hidden; sound is off until the supervisor clicks the button (browsers block sound before a click).
 - [x] **D4. Site map:** zone grid with worker dots colored by heat risk, "Simulated location" label. *Done when:* changing a zone moves the dot within ~1 s. Done 2026-11-06: in real time the dot moved 21-43 ms after a zone change on a worker card and 0.7-0.8 s after a change made through the API (next refresh); 21 scripted browser checks pass (grid from `zones.json`, heat colors, offline, fall mark, names as text, "Not on the map" for no or unknown zone); fits 390 px; 24 `node --test` tests. Dots carry the heat level in words too, and a legend explains the colors. Bad entries in `zones.json` are skipped and named on the page.
-- [ ] **D5. Stretch:** confirm/dismiss/notes, manual report form, hazard shading, falls/heat toggle, sample note. *Done when:* A7 passes.
+- [x] **D5. Stretch:** confirm/dismiss/notes, manual report form, hazard shading, falls/heat toggle, sample note. *Done when:* A7 passes. Done 2026-11-06: A7 passes; 31 scripted browser checks in real time (confirm shades the zone in ~50 ms, dismissed and new incidents don't count, sample counts are labeled, a note being typed survives refreshes, reports saved from the form, heat layer, time window, confirming a fall clears its alert); fits 390 px; 30 `node --test` tests. Zones are shaded (no GPS markers: the indoor demo has no fix).
 - [ ] **D6. Docs + check:** how to open it, screenshots at desktop and phone width.
 
 Original task list (covered by the phases above):

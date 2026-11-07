@@ -227,3 +227,68 @@ h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap
 .legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); }
 .legend li { display: inline-flex; align-items: center; gap: 6px; }
 .legend .dot__swatch { width: 14px; height: 14px; }
+
+/* Review, reports, map layers (D5) */
+.btn--small { font-size: 0.85rem; padding: 4px 10px; }
+.btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn--primary:hover { background: #174a95; }
+.btn--confirmed { color: #8a4b00; }
+.btn--dismissed { color: var(--muted); }
+.btn:disabled { opacity: 0.6; cursor: wait; }
+
+.incident__actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.incident__statusbtns { display: contents; }
+.incident__editor { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.incident__editor[hidden] { display: none; }
+.incident__textarea, .report textarea, .report input, .report select {
+  font: inherit; font-size: 0.95rem; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; width: 100%;
+}
+.incident__textarea:focus, .report textarea:focus, .report input:focus, .report select:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+.incident__editorbtns { display: flex; gap: 6px; }
+.incident__msg { font-size: 0.85rem; color: var(--ok); }
+.incident__msg:empty { display: none; }
+.incident__msg--error { color: var(--bad); }
+.incident--saving { outline: 2px dashed var(--accent); }
+
+#report-open { margin-bottom: 10px; }
+.report {
+  display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px; margin-bottom: 12px; background: #fafbfc;
+}
+.report[hidden] { display: none; }
+.report label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 0.9rem; }
+.report label[hidden] { display: none; }
+.report__type { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.report__type legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 4px; }
+.report__type label { flex-direction: row; align-items: center; font-weight: 400; font-size: 0.95rem; }
+.report__type input { width: auto; }
+.report__buttons { display: flex; gap: 8px; }
+.report__msg { font-size: 0.9rem; color: var(--ok); margin-bottom: 10px; }
+.report__msg:empty { display: none; }
+.report__msg--error { color: var(--bad); }
+
+.map__controls { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.map__hours { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; color: var(--muted); }
+.map__hours select { font: inherit; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg__btn { font: inherit; font-size: 0.9rem; font-weight: 600; padding: 5px 14px; border: 0; background: var(--panel); color: var(--muted); cursor: pointer; }
+.seg__btn + .seg__btn { border-left: 1px solid var(--border); }
+.seg__btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.seg__btn:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+
+.zone__layer { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+/* Incident layer: more confirmed incidents, darker red */
+.zone--shade-1 { background: #fbe3e1; border-color: #f0b4ae; }
+.zone--shade-2 { background: #f6c4bf; border-color: #e3867d; }
+.zone--shade-3 { background: #ee9d95; border-color: var(--bad); }
+.zone--shade-1 .zone__layer, .zone--shade-2 .zone__layer, .zone--shade-3 .zone__layer { color: #7a1610; }
+/* Heat layer: thick top edge in the heat color, light tint */
+.zone--heat { border-top-width: 10px; }
+.zone--heat-normal { border-top-color: var(--heat-normal); background: #eaf6ee; }
+.zone--heat-caution { border-top-color: var(--heat-caution); background: #fdf6dc; }
+.zone--heat-extreme_caution { border-top-color: var(--heat-extreme-caution); background: #fdecdb; }
+.zone--heat-danger { border-top-color: var(--heat-danger); background: #fadedd; }
+.zone--heat-extreme_danger { border-top-color: var(--heat-extreme-danger); background: #f1d6d6; }
+.zone--heat-none { border-top-color: var(--heat-none); }
+/* A new fall outline wins over either layer */
+.zone.zone--fall { border-color: var(--bad); box-shadow: 0 0 0 2px var(--bad); }

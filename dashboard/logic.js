@@ -203,3 +203,72 @@ export function dotLabel(device) {
   if (l?.gps_fix && l.lat != null && l.lon != null) parts.push(`GPS ${l.lat.toFixed(5)}, ${l.lon.toFixed(5)}`);
   return `${device.name}: ${parts.join(", ")}`;
 }
+
+// --- Stretch: review, reports, hazard map (D5) --------------------------------
+
+const ACTION_LABELS = { confirmed: "Confirm", dismissed: "Dismiss", new: "Mark new" };
+
+// Status buttons for an incident row: every status except the current one.
+export function statusActions(status) {
+  return ["confirmed", "dismissed", "new"]
+    .filter((s) => s !== status)
+    .map((s) => ({ status: s, label: ACTION_LABELS[s] }));
+}
+
+const MAX_NOTES = 2000; // server limit, server/app/models.py
+
+// What to send when a note is saved. { body }, { error }, or {} when unchanged. Empty clears it.
+export function notesPatch(typed, currentNotes) {
+  const notes = (typed ?? "").trim();
+  if (notes === (currentNotes ?? "")) return {};
+  if (notes.length > MAX_NOTES) return { error: `Notes must be ${MAX_NOTES} characters or fewer` };
+  return { body: { notes } };
+}
+
+const REPORT_TYPES = ["injury_report", "hazard_report"];
+
+// Body for POST /api/incidents from the report form, or { error }. A chosen helmet wins over a
+// typed name: the server copies that helmet's current name (PROTOCOL.md section 5).
+export function reportBody(form) {
+  if (!REPORT_TYPES.includes(form.type)) return { error: "Pick a report type" };
+  const zone = (form.zone ?? "").trim();
+  if (!zone) return { error: "Pick the zone where it happened" };
+  const notes = (form.notes ?? "").trim();
+  if (notes.length > MAX_NOTES) return { error: `Notes must be ${MAX_NOTES} characters or fewer` };
+  const body = { type: form.type, zone, notes };
+  if (form.deviceId) {
+    body.device_id = form.deviceId;
+  } else {
+    const name = (form.workerName ?? "").trim();
+    if (name.length > MAX_NAME) return { error: `Name must be ${MAX_NAME} characters or fewer` };
+    if (name) body.worker_name = name;
+  }
+  return { body };
+}
+
+// Heat index (°C) to heat level, same bands as the server (PROTOCOL.md section 7).
+// Used for the map's heat layer, where /api/hazards gives only the number.
+export function heatLevelFor(hi) {
+  if (hi == null) return null;
+  if (hi < 27) return "normal";
+  if (hi < 32) return "caution";
+  if (hi < 39) return "extreme_caution";
+  if (hi < 51) return "danger";
+  return "extreme_danger";
+}
+
+// Incident layer for one zone of GET /api/hazards. Only confirmed incidents count. shade 0-3.
+export function hazardView(entry) {
+  const n = entry?.confirmed_count ?? 0;
+  if (n === 0) return { shade: 0, text: "No confirmed incidents" };
+  const sample = entry.sample_count ? ` (includes ${entry.sample_count} sample)` : "";
+  return { shade: Math.min(n, 3), text: `${n} confirmed incident${n === 1 ? "" : "s"}${sample}` };
+}
+
+// Heat layer for one zone: the highest heat index seen there in the time window.
+export function zoneHeatView(entry) {
+  const hi = entry?.max_heat_index_c ?? null;
+  if (hi == null) return { level: null, text: "No heat readings" };
+  const level = heatLevelFor(hi);
+  return { level, text: `Max heat index ${fmt1(hi)} °C (${heatInfo(level).label})` };
+}

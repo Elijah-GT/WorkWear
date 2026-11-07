@@ -1,11 +1,11 @@
 // Dashboard entry point: loads data from the server every second and draws the page.
 // All text from the server (names, notes) is inserted with textContent, never as HTML.
 
-import { getJSON, patchJSON } from "./api.js";
+import { getJSON, patchJSON, postJSON } from "./api.js";
 import {
-  checkNewFalls, formatAgo, formatClock, formatReading, heatInfo, incidentBadges, incidentPlace,
-  dotLabel, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout, namePatch, summarize,
-  zoneOptions, zonePatch,
+  checkNewFalls, dotLabel, formatAgo, formatClock, formatReading, hazardView, heatInfo,
+  incidentBadges, incidentPlace, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout,
+  namePatch, notesPatch, reportBody, statusActions, summarize, zoneHeatView, zoneOptions, zonePatch,
 } from "./logic.js";
 
 const REFRESH_MS = 1000;       // devices and incidents
@@ -19,6 +19,9 @@ const state = {
   error: null,          // message if the last refresh failed
   alertBaseline: null,  // highest incident id already checked for falls (logic.js checkNewFalls)
   alerts: [],           // falls that arrived while the page was open and are not hidden yet, newest first
+  hazards: [],          // GET /api/hazards for the map (D5)
+  layer: "incidents",   // map layer: "incidents" or "heat"
+  hours: null,          // map time window in hours; null = all time
 };
 
 const $ = (id) => document.getElementById(id);
@@ -56,12 +59,17 @@ async function refresh() {
   inFlight = true;
   clearTimeout(timer);
   try {
-    const [devices, incidents] = await Promise.all([
+    const [devices, incidents, hazards] = await Promise.all([
       getJSON("/api/devices"),
       getJSON(`/api/incidents?limit=${INCIDENT_LIMIT}`),
+      getJSON(`/api/hazards${state.hours ? `?hours=${state.hours}` : ""}`),
     ]);
     state.devices = devices;
     state.incidents = incidents;
+    state.hazards = hazards;
+    // A fall that was confirmed or dismissed has been dealt with, so its alert goes away.
+    const statusById = new Map(incidents.map((i) => [i.id, i.status]));
+    state.alerts = state.alerts.filter((a) => (statusById.get(a.id) ?? "new") === "new");
     const found = checkNewFalls(incidents, state.alertBaseline);
     state.alertBaseline = found.baseline;
     if (found.falls.length) {
@@ -366,11 +374,82 @@ function buildRow(inc) {
   const place = el("div", "incident__place");
   const time = el("div", "incident__time");
   const notes = el("div", "incident__notes");
-  root.append(top, who, place, time, notes);
-  return { root, title, badges, who, place, time, notes, badgeKey: null };
+
+  // Review (D5): status buttons and a note editor.
+  const actions = el("div", "incident__actions");
+  const statusBtns = el("span", "incident__statusbtns");
+  const noteBtn = el("button", "btn btn--small", "Add note");
+  noteBtn.type = "button";
+  actions.append(statusBtns, noteBtn);
+  const editor = el("div", "incident__editor");
+  editor.hidden = true;
+  const textarea = el("textarea", "incident__textarea");
+  textarea.rows = 3;
+  textarea.maxLength = 2000;
+  textarea.setAttribute("aria-label", `Notes for incident ${inc.id}`);
+  const saveNote = el("button", "btn btn--small btn--primary", "Save note");
+  saveNote.type = "button";
+  const cancelNote = el("button", "btn btn--small", "Cancel");
+  cancelNote.type = "button";
+  const editorBtns = el("div", "incident__editorbtns");
+  editorBtns.append(saveNote, cancelNote);
+  editor.append(textarea, editorBtns);
+  const msg = el("div", "incident__msg");
+  msg.setAttribute("role", "status");
+
+  root.append(top, who, place, time, notes, actions, editor, msg);
+  const row = { root, title, badges, who, place, time, notes, statusBtns, noteBtn, editor, textarea, msg,
+    inc, badgeKey: null, statusKey: null };
+
+  const closeEditor = () => { editor.hidden = true; noteBtn.hidden = false; noteBtn.focus(); };
+  noteBtn.addEventListener("click", () => {
+    textarea.value = row.inc.notes;
+    editor.hidden = false;
+    noteBtn.hidden = true;
+    textarea.focus();
+  });
+  cancelNote.addEventListener("click", closeEditor);
+  const commitNote = async () => {
+    const result = notesPatch(textarea.value, row.inc.notes);
+    if (result.error) { showRowMessage(row, result.error, true); return; }
+    if (result.body && !(await saveIncident(row, result.body, "Note"))) return;
+    closeEditor();
+  };
+  saveNote.addEventListener("click", commitNote);
+  textarea.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); closeEditor(); }
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commitNote(); }
+  });
+  return row;
+}
+
+function showRowMessage(row, text, isError) {
+  row.msg.textContent = text;
+  row.msg.className = `incident__msg${isError ? " incident__msg--error" : ""}`;
+  clearTimeout(row.msgTimer);
+  if (text && !isError) row.msgTimer = setTimeout(() => showRowMessage(row, "", false), 2500);
+}
+
+// PATCH an incident. Returns true if it was saved.
+async function saveIncident(row, body, what) {
+  row.root.classList.add("incident--saving");
+  for (const b of row.root.querySelectorAll("button")) b.disabled = true;
+  try {
+    await patchJSON(`/api/incidents/${row.inc.id}`, body);
+    showRowMessage(row, `${what} saved`, false);
+    refreshNow();
+    return true;
+  } catch (err) {
+    showRowMessage(row, `Couldn't save ${what.toLowerCase()}: ${err.message}`, true);
+    return false;
+  } finally {
+    row.root.classList.remove("incident--saving");
+    for (const b of row.root.querySelectorAll("button")) b.disabled = false;
+  }
 }
 
 function updateRow(row, inc, now, alerting) {
+  row.inc = inc;
   row.root.className = `incident incident--${inc.type}${alerting ? " incident--alerting" : ""}`;
   setText(row.title, `${incidentTitle(inc.type)} #${inc.id}`);
   const badges = incidentBadges(inc);
@@ -384,6 +463,16 @@ function updateRow(row, inc, now, alerting) {
   setText(row.time, formatClock(inc.ts, now));
   setText(row.notes, inc.notes ? `Notes: ${inc.notes}` : "");
   row.notes.hidden = !inc.notes;
+  setText(row.noteBtn, inc.notes ? "Edit note" : "Add note");
+  if (row.statusKey !== inc.status) {
+    row.statusBtns.replaceChildren(...statusActions(inc.status).map((a) => {
+      const b = el("button", `btn btn--small btn--${a.status}`, a.label);
+      b.type = "button";
+      b.addEventListener("click", () => saveIncident(row, { status: a.status }, "Status"));
+      return b;
+    }));
+    row.statusKey = inc.status;
+  }
 }
 
 function renderIncidents() {
@@ -408,6 +497,86 @@ function renderIncidents() {
     if (!seen.has(id)) { row.root.remove(); rows.delete(id); }
   }
 }
+
+// --- Manual report form (D5) ---------------------------------------------------
+// Injuries and hazards (e.g. a wet floor) are entered by hand; the helmet cannot detect them.
+
+const form = $("report");
+let reportKey = null;
+
+function fillReportOptions() {
+  const zones = zoneOptions(state.zones, null).slice(1); // every zone, without "No zone"
+  const workers = state.devices.map((d) => ({
+    value: d.device_id, label: d.name === d.device_id ? d.name : `${d.name} (${d.device_id})`,
+  }));
+  const key = JSON.stringify([zones, workers]);
+  if (key === reportKey || form.contains(document.activeElement)) return;
+  const fill = (select, first, options) => {
+    const keep = select.value;
+    select.replaceChildren(...[first, ...options].map((o) => {
+      const opt = el("option", null, o.label);
+      opt.value = o.value;
+      return opt;
+    }));
+    select.value = [first, ...options].some((o) => o.value === keep) ? keep : "";
+  };
+  fill(form.elements.zone, { value: "", label: "Pick a zone" }, zones);
+  fill(form.elements.device, { value: "", label: "No helmet / not listed" }, workers);
+  reportKey = key;
+  updateNameField();
+}
+
+// The typed name is only used when no helmet is picked.
+function updateNameField() {
+  $("report-name-row").hidden = form.elements.device.value !== "";
+}
+
+function setReportOpen(open) {
+  form.hidden = !open;
+  $("report-open").setAttribute("aria-expanded", String(open));
+  if (open) {
+    reportKey = null;
+    fillReportOptions();
+    form.elements.type[0].focus();
+  }
+}
+
+$("report-open").addEventListener("click", () => {
+  setText("report-msg", "");
+  setReportOpen(form.hidden);
+});
+$("report-cancel").addEventListener("click", () => { form.reset(); setReportOpen(false); $("report-open").focus(); });
+form.elements.device.addEventListener("change", updateNameField);
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = form.elements;
+  const result = reportBody({
+    type: f.type.value, zone: f.zone.value, deviceId: f.device.value, workerName: f.name.value, notes: f.notes.value,
+  });
+  const msg = $("report-msg");
+  if (result.error) {
+    msg.className = "report__msg report__msg--error";
+    setText(msg, result.error);
+    return;
+  }
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  try {
+    const inc = await postJSON("/api/incidents", result.body);
+    form.reset();
+    setReportOpen(false);
+    msg.className = "report__msg";
+    setText(msg, `${incidentTitle(inc.type)} #${inc.id} saved. Confirm it in the list for it to count on the hazard map.`);
+    $("report-open").focus();
+    refreshNow();
+  } catch (err) {
+    msg.className = "report__msg report__msg--error";
+    setText(msg, `Couldn't save the report: ${err.message}`);
+  } finally {
+    submit.disabled = false;
+  }
+});
 
 // --- Site map (D4) --------------------------------------------------------------
 // The zone grid is built once from zones.json. Each worker has one dot element that is moved
@@ -438,10 +607,11 @@ function buildGrid(layout) {
     const head = el("div", "zone__head");
     const count = el("span", "zone__count");
     head.append(el("strong", "zone__label", c.label), count);
+    const layer = el("div", "zone__layer");
     const list = el("ul", "dots");
     list.setAttribute("aria-label", `Workers in zone ${c.label}`);
-    cell.append(head, list);
-    zoneLists.set(c.id, { cell, list, count });
+    cell.append(head, layer, list);
+    zoneLists.set(c.id, { cell, list, count, layer });
     return cell;
   }));
 }
@@ -480,13 +650,36 @@ function renderMap() {
   setText(problems, layout.problems.length ? `Check dashboard/zones.json: ${layout.problems.join("; ")}.` : "");
 
   const fallen = new Set(state.alerts.map((a) => a.device_id));
+  const hazards = new Map(state.hazards.map((h) => [h.zone, h]));
+  let sample = 0;
   for (const c of layout.cells) {
     const z = zoneLists.get(c.id);
     if (!z) continue;
     placeDots(z.list, c.workers, fallen);
     setText(z.count, c.workers.length === 1 ? "1 worker" : `${c.workers.length} workers`);
     z.cell.classList.toggle("zone--fall", c.workers.some((d) => fallen.has(d.device_id)));
+    // Layer (D5): confirmed incidents shade the zone, or heat colors it.
+    const h = hazards.get(c.id);
+    sample += h?.sample_count ?? 0;
+    let cls = "zone";
+    let text;
+    if (state.layer === "heat") {
+      const v = zoneHeatView(h);
+      cls += ` zone--heat zone--heat-${v.level ?? "none"}`;
+      text = v.text;
+    } else {
+      const v = hazardView(h);
+      cls += ` zone--shade-${v.shade}`;
+      text = v.text;
+    }
+    if (z.cell.classList.contains("zone--fall")) cls += " zone--fall";
+    if (z.cell.className !== cls) z.cell.className = cls;
+    setText(z.layer, text);
   }
+  setText("map-layer-note", state.layer === "heat"
+    ? "Colored by the highest heat index measured in each zone (heat risk from air conditions, not body temperature)."
+    : `Shaded by confirmed incidents (falls and reports). New and dismissed incidents do not count.${
+      sample ? " Counts include sample data from simulated helmets." : ""}`);
   placeDots($("map-off"), layout.offMap, fallen);
   $("map-off").parentElement.hidden = layout.offMap.length === 0;
 
@@ -501,6 +694,18 @@ function renderMap() {
   while (off.children.length > layout.offMap.length) off.lastElementChild.remove();
 }
 
+for (const b of document.querySelectorAll("#map-layers button")) {
+  b.addEventListener("click", () => {
+    state.layer = b.dataset.layer;
+    for (const o of document.querySelectorAll("#map-layers button")) o.setAttribute("aria-pressed", String(o === b));
+    renderMap();
+  });
+}
+$("map-hours").addEventListener("change", (e) => {
+  state.hours = e.target.value ? Number(e.target.value) : null;
+  refreshNow();
+});
+
 // --- Page --------------------------------------------------------------------
 
 function render() {
@@ -511,6 +716,7 @@ function render() {
   renderWorkers();
   renderIncidents();
   renderMap();
+  if (!form.hidden) fillReportOptions();
 }
 
 loadZones();

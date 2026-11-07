@@ -185,7 +185,7 @@ Optional query parameter: `hours` (only count incidents and telemetry from the l
 
 ## 7. Heat levels
 
-The server maps `heat_index_c` to `heat_level` using the NWS heat index bands. The dashboard colors workers by `heat_level` and calls it **heat risk** (ambient conditions at the helmet), never heat stress or body temperature.
+The server maps `heat_index_c` to `heat_level` using the NWS heat index bands. The dashboard colors workers by `heat_level` and calls it **heat risk** (ambient conditions at the helmet), never heat stress or body temperature. The dashboard's map heat layer applies the same bands to `max_heat_index_c` from `GET /api/hazards` (`heatLevelFor` in `dashboard/logic.js`), so change both if the bands change.
 
 | `heat_level` | Heat index | Suggested color |
 |---|---|---|
@@ -203,3 +203,4 @@ The server maps `heat_index_c` to `heat_level` using the NWS heat index bands. T
 | 2026-11-06 | First version, from the data contract in `CLAUDE.md` and the decisions in `PLAN.md` section 8. |
 | 2026-11-06 | Added optional `sent_uptime_ms` to fall events and based `delayed` on it. Added the `sim-` device ID rule (incidents marked `sample: true`). |
 | 2026-11-06 | S3: added `sample_count` to `GET /api/hazards`; spelled out manual-report rules (known device, name copied from the device, `sim-` reports are sample) and that `PATCH /api/incidents` status can move in any direction. |
+| 2026-11-06 | D5: noted that the dashboard's heat layer uses the same heat bands (section 7). No field changes. |

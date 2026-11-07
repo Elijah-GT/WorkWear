@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  checkNewFalls, formatAgo, formatClock, formatReading, heatInfo, incidentBadges, incidentPlace,
-  dotLabel, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout, namePatch, summarize,
-  zoneOptions, zonePatch,
+  checkNewFalls, dotLabel, formatAgo, formatClock, formatReading, hazardView, heatInfo, heatLevelFor,
+  incidentBadges, incidentPlace, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout,
+  namePatch, notesPatch, reportBody, statusActions, summarize, zoneHeatView, zoneOptions, zonePatch,
 } from "../logic.js";
 
 test("isSimulated only matches the sim- prefix", () => {
@@ -211,4 +211,56 @@ test("dotLabel gives name, heat risk, and offline / GPS details", () => {
   assert.equal(dotLabel({ ...d, latest: { heat_level: "normal", gps_fix: true, lat: 45.1, lon: -122.5 } }),
     "Sam: Normal heat risk, GPS 45.10000, -122.50000");
   assert.equal(dotLabel(dev("h", null, "Bo")), "Bo: No reading");
+});
+
+// --- Stretch: review, reports, hazard map (D5) --------------------------------
+
+test("statusActions offers the two other statuses", () => {
+  assert.deepEqual(statusActions("new").map((a) => a.status), ["confirmed", "dismissed"]);
+  assert.deepEqual(statusActions("confirmed").map((a) => a.label), ["Dismiss", "Mark new"]);
+  assert.deepEqual(statusActions("dismissed").map((a) => a.label), ["Confirm", "Mark new"]);
+});
+
+test("notesPatch trims, allows clearing, and limits length", () => {
+  assert.deepEqual(notesPatch("  wet floor ", ""), { body: { notes: "wet floor" } });
+  assert.deepEqual(notesPatch("same", "same"), {});
+  assert.deepEqual(notesPatch("   ", "old"), { body: { notes: "" } });
+  assert.ok(notesPatch("x".repeat(2001), "").error);
+});
+
+test("reportBody builds a manual report and checks it", () => {
+  assert.deepEqual(reportBody({ type: "hazard_report", zone: "A2", deviceId: "", workerName: "", notes: " wet floor " }),
+    { body: { type: "hazard_report", zone: "A2", notes: "wet floor" } });
+  assert.deepEqual(reportBody({ type: "injury_report", zone: "B1", deviceId: "helmet-01", workerName: "ignored", notes: "" }),
+    { body: { type: "injury_report", zone: "B1", notes: "", device_id: "helmet-01" } });
+  assert.deepEqual(reportBody({ type: "injury_report", zone: "B1", deviceId: "", workerName: " Alex P. ", notes: "" }),
+    { body: { type: "injury_report", zone: "B1", notes: "", worker_name: "Alex P." } });
+  assert.match(reportBody({ type: "injury_report", zone: "", deviceId: "", workerName: "", notes: "" }).error, /zone/i);
+  assert.match(reportBody({ type: "fall", zone: "A1", deviceId: "", workerName: "", notes: "" }).error, /type/i);
+  assert.ok(reportBody({ type: "injury_report", zone: "A1", deviceId: "", workerName: "x".repeat(81), notes: "" }).error);
+  assert.ok(reportBody({ type: "injury_report", zone: "A1", deviceId: "", workerName: "", notes: "x".repeat(2001) }).error);
+});
+
+test("heatLevelFor uses the protocol bands", () => {
+  assert.equal(heatLevelFor(null), null);
+  assert.equal(heatLevelFor(26.9), "normal");
+  assert.equal(heatLevelFor(27), "caution");
+  assert.equal(heatLevelFor(32), "extreme_caution");
+  assert.equal(heatLevelFor(39), "danger");
+  assert.equal(heatLevelFor(51), "extreme_danger");
+});
+
+test("hazardView: shade by confirmed count, say when sample data is included", () => {
+  assert.deepEqual(hazardView(undefined), { shade: 0, text: "No confirmed incidents" });
+  assert.deepEqual(hazardView({ confirmed_count: 0, sample_count: 0 }), { shade: 0, text: "No confirmed incidents" });
+  assert.deepEqual(hazardView({ confirmed_count: 1, sample_count: 0 }), { shade: 1, text: "1 confirmed incident" });
+  assert.deepEqual(hazardView({ confirmed_count: 2, sample_count: 2 }),
+    { shade: 2, text: "2 confirmed incidents (includes 2 sample)" });
+  assert.equal(hazardView({ confirmed_count: 9, sample_count: 0 }).shade, 3);
+});
+
+test("zoneHeatView shows the highest heat index in the window", () => {
+  assert.deepEqual(zoneHeatView({ max_heat_index_c: 33.26 }), { level: "extreme_caution", text: "Max heat index 33.3 °C (Extreme caution)" });
+  assert.deepEqual(zoneHeatView({ max_heat_index_c: null }), { level: null, text: "No heat readings" });
+  assert.deepEqual(zoneHeatView(undefined), { level: null, text: "No heat readings" });
 });

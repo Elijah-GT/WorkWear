@@ -27,16 +27,17 @@
     </div>
   </header>
 
-  <div id="alert" class="alert" role="alert" hidden>
-    <div class="alert__body">
-      <div class="alert__title" id="alert-title"></div>
-      <div id="alert-detail"></div>
-      <div class="alert__badges" id="alert-badges"></div>
-      <div class="alert__more" id="alert-more"></div>
+  <!-- Fall alert line: always there at a fixed height, so a fall never moves or covers the page.
+       Quiet when there is nothing; red and pulsing when a fall comes in. -->
+  <div id="alert" class="alert" data-state="idle">
+    <span class="alert__icon" aria-hidden="true"></span>
+    <div class="alert__body" role="alert">
+      <div class="alert__title" id="alert-title">No fall alerts</div>
+      <div class="alert__detail"><span id="alert-detail"></span><span class="alert__badges" id="alert-badges"></span><span class="alert__more" id="alert-more"></span></div>
     </div>
     <div class="alert__actions">
-      <button id="alert-show" class="btn" type="button">Show in list</button>
-      <button id="alert-hide" class="btn" type="button">Hide alert</button>
+      <button id="alert-show" class="btn" type="button" hidden>Show in list</button>
+      <button id="alert-hide" class="btn" type="button" hidden>Hide alert</button>
     </div>
   </div>
 
@@ -74,29 +75,35 @@
       </div>
       <details class="mapkey" id="map-key">
       <summary>Map key</summary>
-      <p class="panel__note" id="map-layer-note"></p>
-      <ul class="legend" id="legend-incidents" aria-label="Zone colors">
-        <li class="legend__title">Zones:</li>
-        <li><span class="legend__zone legend__zone--shade-1"></span>1 confirmed incident</li>
-        <li><span class="legend__zone legend__zone--shade-2"></span>2</li>
-        <li><span class="legend__zone legend__zone--shade-3"></span>3 or more</li>
-        <li><span class="legend__zone legend__zone--fall"></span>New fall, not reviewed yet</li>
-        <li class="legend__title">Falls:</li>
-        <li><span class="legend__marker marker--new marker--exact"></span>Not reviewed</li>
-        <li><span class="legend__marker marker--confirmed marker--exact"></span>Confirmed</li>
-        <li><span class="legend__marker marker--new marker--approx"></span>Approximate spot (somewhere in its zone)</li>
-      </ul>
-      <ul class="legend" aria-label="Worker dot colors">
-        <li class="legend__title">Worker heat risk:</li>
-        <li><span class="dot__swatch heat--normal"></span>Normal</li>
-        <li><span class="dot__swatch heat--caution"></span>Caution</li>
-        <li><span class="dot__swatch heat--extreme-caution"></span>Extreme caution</li>
-        <li><span class="dot__swatch heat--danger"></span>Danger</li>
-        <li><span class="dot__swatch heat--extreme-danger"></span>Extreme danger</li>
-        <li><span class="dot__swatch heat--none"></span>No reading</li>
-        <li><span class="dot__swatch dot__swatch--fall"></span>New fall</li>
-        <li><span class="legend__located"></span>Blue ring: located by beacons or GPS</li>
-      </ul>
+      <div class="mapkey__body">
+        <div id="legend-incidents">
+          <h3 class="mapkey__title">Zones</h3>
+          <ul class="legend" aria-label="Zone colors">
+            <li class="legend__wide"><span class="legend__zone legend__zone--shade-1"></span><span class="legend__zone legend__zone--shade-2"></span><span class="legend__zone legend__zone--shade-3"></span>Confirmed incidents: 1, 2, 3+</li>
+            <li class="legend__wide"><span class="legend__zone legend__zone--fall"></span>New fall, not reviewed yet</li>
+          </ul>
+          <h3 class="mapkey__title">Falls</h3>
+          <ul class="legend" aria-label="Fall dots">
+            <li><span class="legend__marker marker--new marker--exact"></span>Not reviewed</li>
+            <li><span class="legend__marker marker--confirmed marker--exact"></span>Confirmed</li>
+            <li class="legend__wide"><span class="legend__marker marker--new marker--approx"></span>Approximate (somewhere in its zone)</li>
+          </ul>
+        </div>
+        <h3 class="mapkey__title">Heat risk <span class="mapkey__sub">(air, not body temperature)</span></h3>
+        <ul class="legend" aria-label="Heat risk colors">
+          <li><span class="dot__swatch heat--normal"></span>Normal</li>
+          <li><span class="dot__swatch heat--caution"></span>Caution</li>
+          <li><span class="dot__swatch heat--extreme-caution"></span>Extreme caution</li>
+          <li><span class="dot__swatch heat--danger"></span>Danger</li>
+          <li><span class="dot__swatch heat--extreme-danger"></span>Extreme danger</li>
+          <li><span class="dot__swatch heat--none"></span>No reading</li>
+        </ul>
+        <h3 class="mapkey__title">Workers</h3>
+        <ul class="legend" aria-label="Worker dots">
+          <li><span class="dot__swatch dot__swatch--fall"></span>New fall</li>
+          <li><span class="legend__located"></span>Located by beacons or GPS</li>
+        </ul>
+      </div>
       </details>
       </div>
     </section>
@@ -125,12 +132,12 @@
       <div id="incidents-empty" class="empty">No incidents yet.</div>
       <ol id="incidents" class="incidents" aria-label="Incidents, newest first" hidden></ol>
     </section>
-  </main>
 
-  <footer class="footer">
-    Heat risk is based on ambient temperature and humidity at the helmet, not body temperature.
-    Location is the zone set by the supervisor (simulated) unless a helmet locates itself with beacons or GPS,
-    which the map marks. Data from simulated helmets is labeled as sample data.
-  </footer>
+    <footer class="footer">
+      Heat risk is based on ambient temperature and humidity at the helmet, not body temperature.
+      Location is the zone set by the supervisor (simulated) unless a helmet locates itself with beacons or GPS,
+      which the map marks. Data from simulated helmets is labeled as sample data.
+    </footer>
+  </main>
 </body>
 </html>

@@ -130,7 +130,7 @@ function setView(view) {
   if (document.body.dataset.view === view) return;
   document.body.dataset.view = view;
   for (const b of document.querySelectorAll(".tabbar__btn")) b.setAttribute("aria-pressed", String(b.dataset.view === view));
-  window.scrollTo(0, 0);
+  document.querySelector(".layout").scrollTop = 0; // only the area under the header scrolls
 }
 
 for (const b of document.querySelectorAll(".tabbar__btn")) b.addEventListener("click", () => setView(b.dataset.view));
@@ -316,9 +316,18 @@ function badgeEls(badges) {
 }
 
 function renderAlert() {
+  // The alert line is always on the page at a fixed height (style.css); only its state changes.
   const box = $("alert");
-  if (state.alerts.length === 0) {
-    box.hidden = true;
+  const active = state.alerts.length > 0;
+  if (box.dataset.state !== (active ? "active" : "idle")) box.dataset.state = active ? "active" : "idle";
+  $("alert-show").hidden = !active;
+  $("alert-hide").hidden = !active;
+  if (!active) {
+    setText("alert-title", "No fall alerts");
+    setText("alert-detail", "");
+    setText("alert-more", "");
+    $("alert-badges").replaceChildren();
+    $("alert-badges").dataset.key = "";
     document.title = BASE_TITLE;
     return;
   }
@@ -332,8 +341,7 @@ function renderAlert() {
     $("alert-badges").dataset.key = key;
   }
   const more = state.alerts.length - 1;
-  setText("alert-more", more ? `+ ${more} more new fall${more > 1 ? "s" : ""} (see the list)` : "");
-  box.hidden = false;
+  setText("alert-more", more ? `+ ${more} more new fall${more > 1 ? "s" : ""}` : "");
   document.title = `(${state.alerts.length}) FALL · ${BASE_TITLE}`;
 }
 
@@ -774,7 +782,6 @@ function renderMap() {
   // itself may have moved on since.
   const fallZones = new Set(state.alerts.map((a) => a.zone).filter(Boolean));
   const hazards = new Map(state.hazards.map((h) => [h.zone, h]));
-  let sample = 0;
   for (const c of layout.cells) {
     const z = zoneLists.get(c.id);
     if (!z) continue;
@@ -785,7 +792,6 @@ function renderMap() {
     // Layer (D5): confirmed incidents fill the zone red, or heat colors it. A new fall is an
     // outline and a "New fall" tag, never a fill, so it can't be mistaken for a past hazard.
     const h = hazards.get(c.id);
-    sample += h?.sample_count ?? 0;
     const v = state.layer === "heat" ? zoneHeatView(h) : hazardView(h);
     let cls = state.layer === "heat" ? `zone zone--heat zone--heat-${v.level ?? "none"}` : `zone zone--shade-${v.shade}`;
     if (hasFall) cls += " zone--fall";
@@ -795,13 +801,7 @@ function renderMap() {
     if (z.cell.title !== label) { z.cell.title = label; z.cell.setAttribute("aria-label", label); }
   }
   $("legend-incidents").hidden = state.layer === "heat";
-  const markers = renderMarkers(layout) ?? [];
-  const approx = markers.some((m) => !m.exact);
-  setText("map-layer-note", state.layer === "heat"
-    ? "Colored by the highest heat index measured in each zone, in the same colors as the worker dots (heat risk from air conditions, not body temperature)."
-    : `Red fill = confirmed incidents (falls and reports), darker = more. New and dismissed incidents do not count.${
-      sample ? " Counts include sample data from simulated helmets." : ""}${
-      markers.length ? ` Red dots are falls${approx ? "; a dashed ring means the spot is approximate (somewhere in that zone)" : ""}.` : ""}`);
+  renderMarkers(layout);
   renderLocationLabels();
   placeDots($("map-off"), layout.offMap, fallen);
   $("map-off").parentElement.hidden = layout.offMap.length === 0;

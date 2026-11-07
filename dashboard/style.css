@@ -56,12 +56,12 @@ h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap
 
 /* Views: the tab bar shows one panel at a time (body[data-view]). The Map view fills the
    window below the header, so the whole plan is on screen and the page does not scroll. */
-body { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
-.layout { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+/* App layout: the header and alert line stay put; only the area below them scrolls. */
+body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+.layout { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--gap); padding-bottom: 8px; }
 body[data-view="map"] .panel:not(.panel--map),
 body[data-view="workers"] .panel:not(.panel--workers),
 body[data-view="incidents"] .panel:not(.panel--incidents) { display: none; }
-body[data-view="map"] { height: 100vh; height: 100dvh; }
 body[data-view="map"] .footer { display: none; }
 
 .panel--map { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -103,8 +103,6 @@ body[data-view="map"] .footer { display: none; }
   .topbar__right { gap: 6px; flex-wrap: nowrap; }
   .topbar .btn, .conn { font-size: 0.8rem; padding: 4px 8px; white-space: nowrap; }
   .panel { padding: 10px; }
-  .alert { padding: 10px 12px; gap: 8px; }
-  .alert__title { font-size: 1.15rem; }
   .panel--map .panel__note { font-size: 0.8rem; }
 
   .tabbar {
@@ -189,22 +187,60 @@ body[data-view="map"] .footer { display: none; }
 .btn--quiet[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
 .topbar__right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-/* Fall alert banner (D3) */
+/* Fall alert line (D3, reworked in D10). It is always in the layout at a fixed height, so a fall
+   never moves or covers anything: quiet when idle, red and pulsing while there is a new fall. */
 .alert {
-  position: sticky; top: 0; z-index: 10; margin-bottom: var(--gap);
-  display: flex; align-items: center; justify-content: space-between; gap: var(--gap); flex-wrap: wrap;
-  padding: 14px 18px; border-radius: var(--radius); background: var(--bad); color: #fff;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+  flex: none; height: 60px; margin-bottom: var(--gap); padding: 0 14px;
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: var(--muted);
 }
-.alert[hidden] { display: none; }
-.alert__body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.alert__title { font-size: 1.4rem; font-weight: 800; overflow-wrap: anywhere; }
-.alert__badges { display: flex; gap: 6px; flex-wrap: wrap; }
-.alert__more { font-weight: 600; }
+.alert__icon {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 900; line-height: 1; background: #e6f4ea; color: var(--ok);
+}
+.alert__icon::before { content: "\2713"; } /* check mark */
+.alert__body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.alert__title, .alert__detail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.alert__title { font-weight: 700; }
+.alert__detail { font-size: 0.85rem; }
+.alert__badges { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: 1px; }
+.alert__badges .badge { font-size: 0.7rem; padding: 1px 8px; }
+.alert__more { margin-left: 8px; font-weight: 700; }
 .alert__more:empty { display: none; }
-.alert__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.alert__actions { flex: none; display: flex; gap: 8px; }
+.alert[data-state="idle"] .alert__detail { display: none; }
+
+.alert[data-state="active"] {
+  background: var(--bad); border-color: var(--bad); color: #fff;
+  animation: alert-pulse 1.2s ease-in-out infinite;
+}
+.alert[data-state="active"] .alert__icon { background: #fff; color: var(--bad); animation: alert-blink 1.2s steps(2, jump-none) infinite; }
+.alert[data-state="active"] .alert__icon::before { content: "!"; }
+.alert[data-state="active"] .alert__title { font-size: 1.1rem; font-weight: 800; }
 .alert .btn { background: #fff; color: var(--bad); border-color: #fff; }
 .alert .btn:focus-visible { outline-color: #fff; }
+/* Only a glow and color change: nothing about the size changes, so nothing moves. */
+@keyframes alert-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(179 38 30 / 0.6); }
+  50% { box-shadow: 0 0 0 6px rgb(179 38 30 / 0.12); }
+}
+@keyframes alert-blink { 50% { background: #ffd6d3; } }
+@media (prefers-reduced-motion: reduce) {
+  .alert[data-state="active"], .alert[data-state="active"] .alert__icon { animation: none; }
+}
+/* Phones: a bit taller, so the detail gets two lines; the buttons stack. */
+@media (max-width: 700px) {
+  .alert { height: 70px; padding: 0 10px; gap: 8px; }
+  .alert__detail {
+    white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    font-size: 0.75rem; line-height: 1.25;
+  }
+  .alert[data-state="active"] .alert__title { font-size: 1rem; }
+  .alert__badges { margin-left: 6px; gap: 4px; }
+  .alert__badges .badge { font-size: 0.65rem; padding: 0 6px; }
+  .alert__actions { flex-direction: column; gap: 4px; }
+  .alert .btn { font-size: 0.75rem; padding: 3px 8px; }
+}
 
 /* Incident list (D3) */
 .incidents { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -291,8 +327,21 @@ body[data-view="map"] .footer { display: none; }
 
 .mapkey { margin: 0; }
 .mapkey > summary { cursor: pointer; font-weight: 700; font-size: 0.9rem; color: var(--accent); padding: 4px 0; }
-.mapkey > .panel__note { margin: 6px 0 0; }
-.mapkey .legend__title { flex-basis: 100%; } /* each group starts on its own line */
+.mapkey__title { font-size: 0.8rem; font-weight: 700; margin: 6px 0 2px; color: var(--text); }
+.mapkey__sub { font-weight: 400; color: var(--muted); }
+.mapkey .legend { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 10px; font-size: 0.78rem; }
+.legend__wide { grid-column: 1 / -1; }
+#legend-incidents[hidden] { display: none; }
+/* Smaller screens: the open key is a panel over the bottom of the map, so it never needs scrolling. */
+@media (max-width: 999px) {
+  .mapwrap__main { flex: 0 1 auto; } /* key right under the map, not at the bottom of the panel */
+  .mapkey { position: relative; }
+  .mapkey[open] > .mapkey__body {
+    position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 6;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 2px 12px 10px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
+  }
+}
 .legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); }
 .legend li { display: inline-flex; align-items: center; gap: 6px; }
 .legend .dot__swatch { width: 14px; height: 14px; }
@@ -372,14 +421,27 @@ body[data-view="map"] .footer { display: none; }
   .map--plan .zone__fall { font-size: 0.6rem; padding: 0 3px; border-width: 1.5px; border-radius: 4px; }
 }
 .zone--fall .zone__fall { display: inline-block; }
-.zone.zone--fall { border: 3px solid var(--bad); z-index: 2; animation: zone-pulse 1.2s ease-in-out infinite; }
+.zone.zone--fall { border: 3px solid var(--bad); }
+/* The pulse is its own layer, so the zone itself makes no stacking context and its names can
+   still sit above the fall dots (see "Map stacking" below). */
+.zone--fall::after {
+  content: ""; position: absolute; inset: -3px; border-radius: inherit; pointer-events: none;
+  z-index: 2; animation: zone-pulse 1.2s ease-in-out infinite;
+}
 @keyframes zone-pulse {
   0%, 100% { box-shadow: 0 0 0 2px rgb(179 38 30 / 0.55); }
   50% { box-shadow: 0 0 0 8px rgb(179 38 30 / 0.15); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .zone.zone--fall { animation: none; box-shadow: 0 0 0 4px rgb(179 38 30 / 0.45); }
+  .zone--fall::after { animation: none; box-shadow: 0 0 0 4px rgb(179 38 30 / 0.45); }
 }
+
+/* Map stacking: zones (no z-index) < pulse outline (2) < fall dots (3) < names and tags (4).
+   Worker names and zone labels are never hidden under fall dots. The name lists let clicks
+   through to the fall dots underneath, except on the names themselves. */
+.map--plan .zone__label, .map--plan .zone__layer, .map--plan .zone__fall, .map--plan .zone .dots { position: relative; z-index: 4; }
+.map--plan .zone .dots { pointer-events: none; }
+.map--plan .zone .dot { pointer-events: auto; }
 
 /* Fall dots on the floor plan. Solid = at its GPS position; dashed ring = approximate (a steady
    spot inside the zone it was recorded in). Bright = not reviewed, dark = confirmed. */

@@ -20,21 +20,21 @@ cd server
 python3 simulator.py --devices 3 --fall-every 30 --heat-ramp 5
 ```
 
-Three simulated helmets appear within a second. Every 30 s one of them "falls", and the red alert banner comes up.
+Three simulated helmets appear within a second. Every 30 s one of them "falls", and the alert line under the header turns red.
 
 ## 2. What is on the page
 
 | Part | What it does |
 |---|---|
 | **Tabs** | One view at a time: **Map**, **Workers** (shows online / all helmets), and **Incidents** (shows how many are new, in red). The page opens on the map, which is sized to fit the window so nothing scrolls. The tabs are in the header; on a phone (700 px wide or less) they are a bar at the bottom. "Show in list" and clicking a fall dot switch to Incidents. |
-| **Alert banner** | Comes up for each fall that arrives while the page is open, with who, where, when, and the peak g. It stays until you click **Hide alert**. Falls that were already in the list when the page opened do not raise it. The browser tab title also shows the count, e.g. "(1) FALL". |
+| **Alert line** | The line under the header is always there and never changes size, so an alert never moves or covers anything. It reads "No fall alerts" until a fall arrives while the page is open; then it turns **red and pulses**, with who, where, when, and the peak g, and **Show in list** / **Hide alert**. It stays until you click **Hide alert**. Falls that were already in the list when the page opened do not raise it. The browser tab title also shows the count, e.g. "(1) FALL". Only the area below the alert line scrolls. |
 | **Alert sound** | Off when the page opens: browsers block sound until you click something. Click **Alert sound: off** to turn it on (it plays a test beep). |
 | **Workers** | One card per helmet: name, online/offline (offline = nothing for 5 s), heat risk color and reading, helmet on/off, last seen. **Click the name to rename** (Enter saves, Esc cancels). **Pick a zone** from the list to say where the worker is. Both are saved on the server, and new incidents use the name and zone at that moment. |
 | **Site map** | The floor plan of room 1520 (from `zones.json`) with its zones drawn on it. A dot per worker in their zone, colored by heat risk. Workers without a zone are listed under "Not on the map". |
-| **Fall dots** | Every fall that isn't dismissed is a red dot on the plan (Incidents layer; the **Time** filter applies). Bright = not reviewed, dark = confirmed; a new fall's dot pulses. With a GPS position (and `gps_points` set up, section 4) the dot is at that spot. Otherwise it sits at a fixed spot inside the zone the fall was recorded in, with a **dashed ring meaning "approximate"**. Hover for who, when, and how sure; click to jump to it in the list. |
+| **Fall dots** | Every fall that isn't dismissed is a red dot on the plan (Incidents layer; the **Time** filter applies). Bright = not reviewed, dark = confirmed; a new fall's dot pulses. With a GPS position (and `gps_points` set up, section 4) the dot is at that spot. Otherwise it sits at a fixed spot inside the zone the fall was recorded in, with a **dashed ring meaning "approximate"**. Hover for who, when, and how sure; click to jump to it in the list. Worker names and zone labels are always drawn on top of fall dots. |
 | **Located workers** | Workers whose helmet located itself (BLE beacons or GPS) have a **blue ring**, and their card says "Located in ... by beacons". The map tag then reads "Location: measured where marked" instead of "Simulated location". Otherwise the zone picked on the card is used. |
 | **New fall on the map** | The zone gets a thick **pulsing red outline** and a **NEW FALL** tag, and the worker's dot pulses. This is never a fill, so a live fall can't be mistaken for a past hazard. It lasts until the alert is hidden or the fall is confirmed or dismissed. |
-| **Map key** | The colors and what they mean. Beside the map on wide screens; on smaller ones, tap **Map key** under the map. |
+| **Map key** | The colors and what they mean, in short groups (Zones, Falls, Heat risk, Workers). Beside the map on wide screens; on smaller ones, tap **Map key** under the map and it opens over the bottom of the map, so there is nothing to scroll. |
 | **Map layers** | **Incidents** fills each zone **red** by its number of **confirmed** incidents (light, medium, dark = 1, 2, 3 or more) with a count tag. Confirming a fall turns its zone's outline into a red fill. **Heat** tints each zone in the heat-risk color of the highest heat index measured there. **Time** limits both to the last 24 h, 8 h, or hour. Hover a zone for the full text. |
 | **Incidents** | Newest first, with badges: New / Confirmed / Dismissed, Sample data, Arrived late. **Confirm** a real incident, **Dismiss** a false alarm, or **Mark new** to undo. Add or edit a note on any incident. Confirming or dismissing a fall also clears its alert. |
 | **Report injury or hazard** | For things the helmet cannot detect, such as a cut hand or a wet floor. Pick the type and zone, and optionally the helmet (its name is copied) or a typed name. Reports start as New; confirm them for them to count on the map. |
@@ -121,7 +121,7 @@ The tests cover the parts that make decisions (heat labels, which falls raise th
 | A rename or zone change shows a red message | The server refused or did not answer; the message says why. The old value is kept. |
 | The map says zones.json could not be loaded | The file has a JSON error (a missing comma is common). Check it with `python3 -m json.tool dashboard/zones.json`. |
 | A worker is not on the map | They have no zone, or a zone not in `zones.json`. Pick one on their card. |
-| An old fall doesn't raise the alert | That is on purpose: only falls that arrive while the page is open do. Check the list for anything still marked New. |
+| An old fall doesn't raise the alert | That is on purpose: only falls that arrive while the page is open do. Check the list for anything still marked New (the red count on the Incidents tab). |
 
 ## Layout
 

@@ -98,7 +98,10 @@ def utc_now() -> str:
 
 
 def connect(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(path, timeout=5)
+    # FastAPI may open a request's connection on one worker thread and run the route on
+    # another. Each connection still belongs to one request and is used by one thread at a
+    # time, so it is safe to let SQLite accept it from any thread.
+    conn = sqlite3.connect(path, timeout=5, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

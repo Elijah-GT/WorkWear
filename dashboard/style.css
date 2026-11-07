@@ -1,4 +1,4 @@
-/* WorkWear dashboard. Large and high-contrast so it reads on a projector or phone. */
+/* WorkWear dashboard. Light theme; colors unchanged from earlier versions (D1-D11). */
 
 :root {
   --bg: #f4f5f7;
@@ -26,120 +26,164 @@
   --hazard-edge-1: rgb(179 38 30 / 0.6);
   --hazard-edge-2: rgb(179 38 30 / 0.8);
 
+  /* One font and one type scale for the whole app */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fs-2xs: 0.6875rem; /* 11 px: tags on small map zones */
+  --fs-xs: 0.75rem;    /* 12 px: pills, captions, table headers */
+  --fs-sm: 0.875rem;   /* 14 px: tables, notes, secondary text */
+  --fs-md: 1rem;       /* 16 px: body */
+  --fs-lg: 1.25rem;    /* 20 px: section titles */
+  --fs-xl: 1.5rem;     /* 24 px: app name */
+
   --radius: 10px;
   --gap: 16px;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 17px;
+  --rail-w: 76px;
+  --people-w: 272px;
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.4;
   color: var(--text);
   background: var(--bg);
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; padding: 0 16px 24px; }
+h1, h2, h3, p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent); }
+code { font-size: var(--fs-sm); }
+[hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.muted { color: var(--muted); font-size: var(--fs-sm); }
+.note { color: var(--muted); font-size: var(--fs-sm); margin-bottom: 12px; max-width: 80ch; }
 
-h1, h2 { margin: 0; }
-h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* --- App shell: header and alert stay put; rail, worker list and main area below --- */
+body { margin: 0; height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
 
-/* Top bar */
 .topbar {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--gap);
-  padding: 14px 0; flex-wrap: wrap;
+  flex: none; display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  background: var(--panel); border-bottom: 1px solid var(--border);
 }
-.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.brand h1 { font-size: 1.6rem; }
-.subtitle { color: var(--muted); }
-
-.conn { padding: 6px 12px; border-radius: 999px; font-weight: 600; border: 2px solid transparent; }
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { font-size: var(--fs-xl); }
+.subtitle { color: var(--muted); font-size: var(--fs-sm); }
+.topbar__right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.conn { padding: 4px 12px; border-radius: 999px; font-weight: 600; font-size: var(--fs-sm); border: 2px solid transparent; white-space: nowrap; }
 .conn--wait { background: #eceef2; color: var(--muted); }
 .conn--up { background: #e6f4ea; color: var(--ok); }
 .conn--down { background: #fde8e7; color: var(--bad); border-color: var(--bad); }
 
-/* Views: the tab bar shows one panel at a time (body[data-view]). The Map view fills the
-   window below the header, so the whole plan is on screen and the page does not scroll. */
-/* App layout: the header and alert line stay put; only the area below them scrolls. */
-body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
-.layout { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--gap); padding-bottom: 8px; }
-body[data-view="map"] .panel:not(.panel--map),
-body[data-view="workers"] .panel:not(.panel--workers),
-body[data-view="incidents"] .panel:not(.panel--incidents) { display: none; }
-body[data-view="map"] .footer { display: none; }
-
-.panel--map { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.mapwrap { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
-.mapwrap__main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.mapbox { flex: 1; min-height: 240px; }
-/* Floor plan: the box is the plan's shape at full width, shrunk when the window is too short;
-   the plan is as big as the box allows while keeping its shape (cqw/cqh = the box's size). */
-.mapbox--plan { container-type: size; flex: 0 1 auto; width: 100%; aspect-ratio: var(--plan-aspect, 1); }
-.mapbox--plan .map--plan { width: min(100cqw, 100cqh * var(--plan-aspect, 1)); margin: 0 auto; }
-@media (min-width: 1000px) {
-  .mapwrap { flex-direction: row; }
-  .mapwrap__main { min-width: 0; }
-  .mapkey { flex: 0 0 300px; overflow-y: auto; margin-top: 0; }
-}
-.incidents, .report { max-width: 60rem; }
-
-/* Tab bar: in the header on wide screens */
-.tabbar { display: flex; gap: 4px; background: #e6e8ec; padding: 4px; border-radius: 10px; }
-.tabbar__btn {
-  font: inherit; font-size: 0.95rem; font-weight: 700; color: var(--muted);
-  background: transparent; border: 0; border-radius: 8px; padding: 6px 14px; cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-}
-.tabbar__btn:hover { color: var(--text); }
-.tabbar__btn[aria-pressed="true"] { background: var(--panel); color: var(--accent); box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }
-.tabbar__btn:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
-.tabbar__count { font-size: 0.75rem; min-width: 1.5em; padding: 1px 6px; border-radius: 999px; background: #d9dce3; color: var(--text); }
-.tabbar__count:empty { display: none; }
-.tabbar__count--alert { background: var(--bad); color: #fff; }
-
-/* Phones: tab bar fixed at the bottom, compact header */
-@media (max-width: 700px) {
-  :root { --gap: 10px; font-size: 16px; }
-  body { padding: 0 8px calc(72px + env(safe-area-inset-bottom)); }
-  .topbar { padding: 8px 0; gap: 8px; flex-wrap: nowrap; }
-  .brand h1 { font-size: 1.25rem; }
-  .subtitle { display: none; }
-  .topbar__right { gap: 6px; flex-wrap: nowrap; }
-  .topbar .btn, .conn { font-size: 0.8rem; padding: 4px 8px; white-space: nowrap; }
-  .panel { padding: 10px; }
-  .panel--map .panel__note { font-size: 0.8rem; }
-
-  .tabbar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; border-radius: 0;
-    background: var(--panel); border-top: 1px solid var(--border);
-    padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); gap: 6px;
-    box-shadow: 0 -2px 10px rgb(0 0 0 / 0.08);
-  }
-  .tabbar__btn { flex: 1; padding: 10px 4px; }
-  .tabbar__btn[aria-pressed="true"] { background: #e3ecfa; box-shadow: none; }
-  .tabbar__count { background: #eceef2; color: var(--muted); }
-  .tabbar__count--alert { background: var(--bad); color: #fff; }
+.app {
+  flex: 1; min-height: 0; margin-top: 10px; border-top: 1px solid var(--border);
+  display: grid; grid-template-columns: var(--rail-w) var(--people-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr); /* the row is the space left, so the main area scrolls inside it */
 }
 
-.panel {
-  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 16px; min-width: 0;
+/* Icon rail */
+.rail { display: flex; flex-direction: column; gap: 4px; padding: 10px 8px; background: var(--panel); border-right: 1px solid var(--border); }
+.rail__item {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px;
+  border-radius: var(--radius); color: var(--muted); text-decoration: none; font-size: var(--fs-xs); font-weight: 600;
 }
-.panel h2 { margin-bottom: 12px; }
-.panel__note { margin: -6px 0 10px; color: var(--muted); font-size: 0.9rem; }
-.empty { color: var(--muted); padding: 8px 0; }
-
-/* Tags and badges */
-.tag {
-  display: inline-block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px;
+.rail__item svg { width: 24px; height: 24px; }
+.rail__item:hover { color: var(--text); background: var(--bg); }
+.rail__item--here, .rail__item--here:hover { color: var(--accent); background: #e3ecfa; }
+.rail__item:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+.rail__count {
+  position: absolute; top: 2px; right: 4px; font-size: var(--fs-2xs); font-weight: 700; line-height: 1.5;
+  padding: 0 5px; border-radius: 999px; background: #d9dce3; color: var(--text);
 }
-.tag--sim { background: #ede7f6; color: #4a2a8a; }
+.rail__count:empty { display: none; }
+.rail__count--alert { background: var(--bad); color: #fff; }
 
-.footer { margin-top: 20px; color: var(--muted); font-size: 0.85rem; max-width: 70ch; }
+/* Worker list */
+.people { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-right: 1px solid var(--border); }
+.search {
+  display: flex; align-items: center; gap: 8px; margin: 12px; padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--muted);
+}
+.search:focus-within { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: -1px; }
+.search svg { width: 18px; height: 18px; flex: none; }
+.search input { border: 0; outline: 0; width: 100%; min-width: 0; background: transparent; color: var(--text); font-size: var(--fs-sm); }
+.search--inline { margin: 0; width: min(100%, 280px); }
+.people__list { list-style: none; margin: 0; padding: 0 8px 12px; overflow-y: auto; flex: 1; }
+.people__empty { padding: 0 16px; }
+.person { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; color: var(--text); text-decoration: none; }
+.person:hover { background: var(--bg); }
+.person--here, .person--here:hover { background: #e3ecfa; }
+.person:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+.person__text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.person__name { font-weight: 600; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person__id { font-size: var(--fs-xs); color: var(--muted); }
+.person__online { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--heat-none); }
+.person__online--on { background: var(--ok); }
 
-/* Badges */
-.badge { font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; }
-.badge--online { background: #e6f4ea; color: var(--ok); }
-.badge--offline { background: #eceef2; color: var(--muted); }
+/* Hard-hat avatar, colored by status (logic.js workerStatus) */
+.avatar { width: 34px; height: 34px; flex: none; padding: 6px; border-radius: 50%; background: #eef0f3; color: var(--heat-none); vertical-align: middle; }
+.avatar--lg { width: 64px; height: 64px; padding: 11px; }
+.avatar[data-status="normal"] { color: var(--heat-normal); }
+.avatar[data-status="caution"] { color: var(--heat-caution); }
+.avatar[data-status="extreme_caution"] { color: var(--heat-extreme-caution); }
+.avatar[data-status="danger"] { color: var(--heat-danger); }
+.avatar[data-status="extreme_danger"] { color: var(--heat-extreme-danger); }
+.avatar[data-status="offline"] { color: var(--heat-none); opacity: 0.6; }
+.avatar[data-status="fall"] { color: var(--bad); background: #fde8e7; box-shadow: 0 0 0 2px var(--bad); }
 
-/* Heat risk swatches (also used by the map later) */
+/* Main area: one view at a time (body[data-view]) */
+.main { min-width: 0; min-height: 0; overflow-y: auto; padding: 16px 20px 24px; }
+.view { display: none; }
+body[data-view="map"] .view[data-view="map"],
+body[data-view="workers"] .view[data-view="workers"],
+body[data-view="incidents"] .view[data-view="incidents"],
+body[data-view="heat"] .view[data-view="heat"],
+body[data-view="settings"] .view[data-view="settings"],
+body[data-view="incident"] .view[data-view="incident"],
+body[data-view="worker"] .view[data-view="worker"] { display: block; }
+.view__head { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 8px; }
+.view__head h2 { font-size: var(--fs-lg); }
+.view__head > :last-child:not(h2):not(.pill):not(.pills) { margin-left: auto; }
+.subhead { font-size: var(--fs-md); margin: 16px 0 8px; }
+.card .subhead:first-child { margin-top: 0; }
+.back { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-sm); font-weight: 600; text-decoration: none; margin-bottom: 10px; }
+.back svg { width: 16px; height: 16px; }
+
+.field { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--muted); }
+.field select, .namefield, .report input, .report select, .report textarea, .noteedit textarea {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); font-size: var(--fs-sm);
+}
+.field--stack { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-top: 10px; }
+select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+
+/* Buttons and pills (one style each) */
+.btn {
+  font-size: var(--fs-sm); font-weight: 600; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text); white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: 0.6; cursor: wait; }
+.btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn--primary:hover { background: #174a95; }
+.btn--quiet { color: var(--muted); }
+.btn--quiet[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.iconbtn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.iconbtn svg { width: 16px; height: 16px; }
+.iconbtn:hover { background: rgb(0 0 0 / 0.06); }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px;
+  font-size: var(--fs-xs); font-weight: 700; line-height: 1.5; white-space: nowrap;
+}
+.pill--pending { background: #fde8e7; color: var(--bad); }
+.pill--confirmed { background: #fff4e5; color: #8a4b00; }
+.pill--dismissed { background: #eceef2; color: var(--muted); }
+.pill--late { background: #fff4e5; color: #8a4b00; }
+.pill--sample, .pill--sim { background: #ede7f6; color: #4a2a8a; }
+.pill--measured { background: #e3ecfa; color: #174a95; }
+.pill--online { background: #e6f4ea; color: var(--ok); }
+.pill--offline { background: #eceef2; color: var(--muted); }
+.pills { display: inline-flex; gap: 4px; flex-wrap: wrap; vertical-align: middle; }
+
+/* Heat-risk swatches (worker dots, tables, key) */
 .heat--normal { background: var(--heat-normal); }
 .heat--caution { background: var(--heat-caution); }
 .heat--extreme-caution { background: var(--heat-extreme-caution); }
@@ -147,373 +191,351 @@ body[data-view="map"] .footer { display: none; }
 .heat--extreme-danger { background: var(--heat-extreme-danger); }
 .heat--none { background: var(--heat-none); }
 
-/* Worker cards (D2) */
-.workers { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-.worker {
-  display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
-  background: var(--panel); transition: opacity 0.2s;
-}
-.worker--offline { opacity: 0.55; }
-.worker--saving { outline: 2px dashed var(--accent); }
-.worker__heat { width: 12px; flex: none; }
-.worker__body { padding: 10px 12px; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.worker__top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.worker__name {
-  font: inherit; font-size: 1.15rem; font-weight: 700; color: var(--text);
-  border: 1px solid transparent; border-radius: 6px; padding: 2px 4px; margin-left: -5px;
-  background: transparent; min-width: 0; flex: 1 1 8ch;
-}
-.worker__name:hover { border-color: var(--border); }
-.worker__name:focus { border-color: var(--accent); outline: none; background: #fff; }
-.worker__id { color: var(--muted); font-size: 0.85rem; }
-.worker__heatline { font-size: 0.95rem; }
-.worker__bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
-.worker__zonelabel { color: var(--muted); font-size: 0.9rem; }
-.worker__zone { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); }
-.worker__msg { font-size: 0.85rem; min-height: 1.1em; color: var(--ok); }
-.worker__msg--error { color: var(--bad); }
-.worn { font-size: 0.9rem; }
-.worn--on { color: var(--ok); }
-.worn--off { color: var(--bad); font-weight: 700; }
-
-/* Buttons */
-.btn {
-  font: inherit; font-size: 0.95rem; font-weight: 600; padding: 6px 12px; border-radius: 8px;
-  border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer;
-}
-.btn:hover { border-color: var(--accent); }
-.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.btn--quiet { color: var(--muted); }
-.btn--quiet[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
-.topbar__right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-
-/* Fall alert line (D3, reworked in D10). It is always in the layout at a fixed height, so a fall
-   never moves or covers anything: quiet when idle, red and pulsing while there is a new fall. */
+/* --- Fall alert: one slim line in a fixed slot (never moves or covers the page) --- */
 .alert {
-  flex: none; height: 60px; margin-bottom: var(--gap); padding: 0 14px;
-  display: flex; align-items: center; gap: 12px;
+  flex: none; height: 40px; margin: 10px 16px 0; padding: 0 6px 0 10px;
+  display: flex; align-items: center; gap: 10px; font-size: var(--fs-sm);
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: var(--muted);
 }
 .alert__icon {
-  flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
-  font-weight: 900; line-height: 1; background: #e6f4ea; color: var(--ok);
+  flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  font-size: var(--fs-xs); font-weight: 900; background: #e6f4ea; color: var(--ok);
 }
 .alert__icon::before { content: "\2713"; } /* check mark */
-.alert__body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
-.alert__title, .alert__detail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.alert__title { font-weight: 700; }
-.alert__detail { font-size: 0.85rem; }
-.alert__badges { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: 1px; }
-.alert__badges .badge { font-size: 0.7rem; padding: 1px 8px; }
-.alert__more { margin-left: 8px; font-weight: 700; }
+.alert__text { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; }
+.alert__label { font-weight: 700; flex: none; }
+.alert__summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: inherit; font-weight: 600; text-decoration: none; }
+.alert__summary:hover { text-decoration: underline; }
+.alert__more { flex: none; font-weight: 700; }
 .alert__more:empty { display: none; }
-.alert__actions { flex: none; display: flex; gap: 8px; }
-.alert[data-state="idle"] .alert__detail { display: none; }
-
+.alert__link { flex: none; color: inherit; font-weight: 700; white-space: nowrap; }
+.alert__hide { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.alert__hide svg { width: 16px; height: 16px; }
+.alert__hide:hover { background: rgb(255 255 255 / 0.2); }
 .alert[data-state="active"] {
   background: var(--bad); border-color: var(--bad); color: #fff;
   animation: alert-pulse 1.2s ease-in-out infinite;
 }
 .alert[data-state="active"] .alert__icon { background: #fff; color: var(--bad); animation: alert-blink 1.2s steps(2, jump-none) infinite; }
 .alert[data-state="active"] .alert__icon::before { content: "!"; }
-.alert[data-state="active"] .alert__title { font-size: 1.1rem; font-weight: 800; }
-.alert .btn { background: #fff; color: var(--bad); border-color: #fff; }
-.alert .btn:focus-visible { outline-color: #fff; }
-/* Only a glow and color change: nothing about the size changes, so nothing moves. */
+.alert[data-state="active"] .alert__label { letter-spacing: 0.04em; }
+.alert a:focus-visible, .alert button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 @keyframes alert-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgb(179 38 30 / 0.6); }
-  50% { box-shadow: 0 0 0 6px rgb(179 38 30 / 0.12); }
+  50% { box-shadow: 0 0 0 5px rgb(179 38 30 / 0.12); }
 }
 @keyframes alert-blink { 50% { background: #ffd6d3; } }
-@media (prefers-reduced-motion: reduce) {
-  .alert[data-state="active"], .alert[data-state="active"] .alert__icon { animation: none; }
-}
-/* Phones: a bit taller, so the detail gets two lines; the buttons stack. */
-@media (max-width: 700px) {
-  .alert { height: 70px; padding: 0 10px; gap: 8px; }
-  .alert__detail {
-    white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-    font-size: 0.75rem; line-height: 1.25;
-  }
-  .alert[data-state="active"] .alert__title { font-size: 1rem; }
-  .alert__badges { margin-left: 6px; gap: 4px; }
-  .alert__badges .badge { font-size: 0.65rem; padding: 0 6px; }
-  .alert__actions { flex-direction: column; gap: 4px; }
-  .alert .btn { font-size: 0.75rem; padding: 3px 8px; }
-}
 
-/* Incident list (D3) */
-.incidents { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.incident {
-  border: 1px solid var(--border); border-left: 6px solid var(--muted); border-radius: var(--radius);
-  padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere;
+/* --- Cards, facts, tables --- */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--gap); margin-bottom: var(--gap); }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; min-width: 0; }
+.card--wide { grid-column: 1 / -1; }
+.card p { font-size: var(--fs-sm); }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: var(--fs-sm); }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.plainlist { margin: 0; padding-left: 18px; font-size: var(--fs-sm); display: grid; gap: 4px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.formmsg { font-size: var(--fs-sm); color: var(--ok); margin: 6px 0; }
+.formmsg:empty { display: none; }
+.formmsg--error { color: var(--bad); }
+.problems { background: var(--warn-bg); border: 1px solid #f0c27a; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: var(--fs-sm); }
+
+.table {
+  width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm);
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
 }
-.incident--fall { border-left-color: var(--bad); }
-.incident--injury_report { border-left-color: var(--heat-extreme-caution); }
-.incident--hazard_report { border-left-color: var(--heat-caution); }
-.incident--alerting { background: #fde8e7; }
-.incident:focus { outline: 3px solid var(--accent); outline-offset: 2px; }
-.incident__top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.incident__title { font-size: 1.05rem; }
-.incident__badges { display: flex; gap: 6px; flex-wrap: wrap; }
-.incident__who { font-weight: 600; }
-.incident__place, .incident__time { color: var(--muted); font-size: 0.9rem; }
-.incident__notes { font-size: 0.9rem; font-style: italic; }
+.table th {
+  text-align: left; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted); background: #fafbfc; padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.table td { padding: 9px 12px; border-bottom: 1px solid #eceef2; vertical-align: middle; }
+.table tbody tr:last-child td { border-bottom: 0; }
+.table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row--link { cursor: pointer; }
+.row--link:hover td { background: #f7f9fc; }
+.row--alert td, .row--alert:hover td { background: #fde8e7; }
+.row--flash td { animation: row-flash 1.8s ease-out; }
+@keyframes row-flash { 0%, 40% { background: #e3ecfa; } }
+.cell__main { display: block; font-weight: 600; color: var(--text); text-decoration: none; }
+a.cell__main:hover { text-decoration: underline; }
+.cell__sub { display: block; font-size: var(--fs-xs); color: var(--muted); }
+.cell--when { white-space: nowrap; }
+.cell--who .avatar { margin-right: 8px; }
+.who__text { display: inline-flex; flex-direction: column; vertical-align: middle; }
+.cell--open { text-align: right; }
+.cell--risk { white-space: nowrap; }
+.cell--risk .dot__swatch { margin-right: 6px; vertical-align: -2px; }
+.viewlink { font-weight: 700; text-decoration: none; }
+.viewlink:hover { text-decoration: underline; }
 
-.badge--new { background: #fde8e7; color: var(--bad); }
-.badge--confirmed { background: #fff4e5; color: #8a4b00; }
-.badge--dismissed { background: #eceef2; color: var(--muted); }
-.badge--sample { background: #ede7f6; color: #4a2a8a; }
-.badge--late { background: #fff4e5; color: #8a4b00; }
+/* Report form */
+.report { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; max-width: 40rem; }
+.report label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: var(--fs-sm); }
+.report__type { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.report__type legend { font-weight: 600; font-size: var(--fs-sm); padding: 0; margin-bottom: 4px; }
+.report__type label { flex-direction: row; align-items: center; font-weight: 400; }
+.report__buttons { display: flex; gap: 8px; }
 
-/* Site map (D4) */
+/* Small lists: zone incidents, nearby workers */
+.minilist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.minirow { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-decoration: none; font-size: var(--fs-sm); }
+.minirow:hover { border-color: var(--accent); }
+.minirow__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.minirow__sub { font-size: var(--fs-xs); color: var(--muted); }
+.minirow--inline { flex-direction: row; align-items: center; gap: 8px; }
+.minirow--inline .cell__sub { margin-left: auto; }
+
+/* Incident page and worker profile */
+.pagegrid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--gap); align-items: start; }
+.noteedit { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.noteedit .actions { margin-top: 0; }
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.timeline__step { position: relative; padding: 0 0 14px 22px; font-size: var(--fs-sm); display: flex; flex-direction: column; }
+.timeline__step::before {
+  content: ""; position: absolute; left: 0; top: 4px; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--heat-none); background: var(--panel);
+}
+.timeline__step::after { content: ""; position: absolute; left: 6px; top: 18px; bottom: 0; width: 2px; background: #eceef2; }
+.timeline__step:last-child::after { display: none; }
+.timeline__step--done::before { border-color: var(--accent); background: var(--accent); }
+.timeline__step:not(.timeline__step--done) .timeline__label { color: var(--muted); }
+.timeline__time { font-size: var(--fs-xs); color: var(--muted); }
+.profile { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.profile__main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.namefield { font-size: var(--fs-lg); font-weight: 700; border-color: transparent; padding: 2px 6px; margin-left: -7px; width: min(100%, 28ch); }
+.namefield:hover { border-color: var(--border); }
+
+/* --- Map section: the plan fills the space left under the header; zone list beside it --- */
+body[data-view="map"] .main { display: flex; flex-direction: column; }
+body[data-view="map"] .view[data-view="map"] { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.mapwrap { position: relative; flex: 1; min-height: 0; display: flex; gap: var(--gap); }
+.mapwrap__main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.mapwrap__main > .planhost { display: contents; }
+.map__off { margin-top: 10px; }
+.zonepanel {
+  flex: 0 0 300px; align-self: stretch; overflow-y: auto; background: var(--panel);
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 12px;
+}
+.zonepanel__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.zonepanel__head h3 { font-size: var(--fs-md); }
+.zonepanel .muted { margin-bottom: 10px; }
+.calibrate { font-size: var(--fs-sm); background: var(--warn-bg); border-radius: 8px; padding: 6px 10px; margin-top: 8px; }
+
+/* Heat: map above the table; side by side only when there is room for both */
+.heatgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); align-items: start; }
+.view--heat .mapbox--plan { max-height: min(60dvh, calc(100dvh - 250px)); }
+@media (min-width: 1500px) {
+  .heatgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .view--heat .mapbox--plan { max-height: calc(100dvh - 250px); }
+}
+.planhost--mini .mapbox--plan { max-height: 360px; }
+
+/* The plan box: the plan's shape at full width, shrunk when there is not enough height; the
+   plan inside is as big as the box allows (cqw/cqh = the box's size). */
+.mapbox { position: relative; }
+.mapbox--plan { container-type: size; flex: 0 1 auto; width: 100%; min-height: 220px; aspect-ratio: var(--plan-aspect, 1); }
+.mapframe { position: relative; }
+.mapbox--plan .mapframe { width: min(100cqw, 100cqh * var(--plan-aspect, 1)); margin: 0 auto; }
+
 .map { display: grid; gap: 8px; }
-.map.empty { display: block; }
-.map__problems { background: var(--warn-bg); border: 1px solid #f0c27a; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 0.9rem; }
-.map__problems[hidden] { display: none; }
-.zone {
-  border: 2px solid var(--border); border-radius: 8px; padding: 8px; min-height: 110px; min-width: 0;
-  background: #fafbfc; display: flex; flex-direction: column; gap: 6px; transition: border-color 0.2s, background 0.2s;
-}
-.zone__head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.zone__label { font-size: 1.05rem; }
-.zone__count { color: var(--muted); font-size: 0.8rem; }
-
-/* Floor-plan map: the image fills the box (its aspect ratio is set from zones.json) and each
-   zone is placed on it in %. Content that does not fit a small room spills over rather than
-   being hidden, so a worker is never cut off the map. */
+.map--empty { display: block; color: var(--muted); font-size: var(--fs-sm); }
 .map--plan { display: block; position: relative; width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
 .map__img { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.55; pointer-events: none; user-select: none; }
+
+/* Small collapsible key in the map's corner */
+.mapkey__btn {
+  position: absolute; top: 8px; right: 8px; z-index: 8; padding: 2px 10px; border-radius: 999px; cursor: pointer;
+  font-size: var(--fs-xs); font-weight: 700; color: var(--accent); background: var(--panel); border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+.mapkey__btn[aria-expanded="true"] { background: #e3ecfa; border-color: var(--accent); }
+.mapkey {
+  position: absolute; top: 36px; right: 8px; z-index: 8; width: min(240px, calc(100% - 16px)); padding: 8px 10px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.16); font-size: var(--fs-xs);
+}
+.mapkey__title { font-weight: 700; margin: 6px 0 3px; }
+.mapkey__title:first-child { margin-top: 0; }
+.mapkey__list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 3px 10px; color: var(--muted); }
+.mapkey__list li { display: inline-flex; align-items: center; gap: 5px; }
+.mapkey__sw { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 3px; }
+.mapkey__sw.sw { border-radius: 50%; }
+.mapkey__sw.shade-1 { background: var(--hazard-1); border: 2px solid var(--hazard-edge-1); width: 20px; }
+.mapkey__sw.shade-2 { background: var(--hazard-2); border: 2px solid var(--hazard-edge-2); width: 20px; }
+.mapkey__sw.shade-3 { background: var(--hazard-3); border: 2px solid var(--bad); width: 20px; }
+.mapkey__sw.zoneline { border: 3px solid var(--bad); width: 20px; }
+.mapkey__sw.mk--alert { border-radius: 50%; background: #e53935; border: 2px solid #fff; box-shadow: 0 0 0 3px rgb(179 38 30 / 0.45); width: 12px; height: 12px; margin: 0 2px; }
+.mapkey__sw.ring { border-radius: 50%; background: var(--panel); box-shadow: 0 0 0 2px var(--accent); }
+
+/* Zones */
+.zone {
+  border: 2px solid var(--border); border-radius: 8px; padding: 8px; min-height: 110px; min-width: 0;
+  background: #fafbfc; display: flex; flex-direction: column; gap: 6px;
+}
 .map--plan .zone {
   position: absolute; min-height: 0; padding: 4px; border-radius: 4px;
   border: 2px dashed rgb(31 95 191 / 0.45); background: transparent;
   flex-direction: row; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: 4px;
 }
-.map--plan .zone__head { display: contents; }
-.map--plan .zone__label { font-size: 0.8rem; background: rgb(255 255 255 / 0.92); border-radius: 6px; padding: 1px 6px; line-height: 1.3; }
+.zone--click { cursor: pointer; }
+.zone--click:hover { background-color: rgb(31 95 191 / 0.06); }
+.zone:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+.zone__label { font-size: var(--fs-sm); }
+.map--plan .zone__label { font-size: var(--fs-xs); background: rgb(255 255 255 / 0.92); border-radius: 6px; padding: 1px 6px; line-height: 1.3; }
+.zone__badge {
+  font-size: var(--fs-xs); font-weight: 700; border-radius: 6px; padding: 0 7px; line-height: 1.5;
+  background: var(--bad); color: #fff;
+}
+.zone__badge:empty { display: none; }
+.zone--heat .zone__badge { background: #fff; color: var(--text); border: 1px solid var(--border); }
+.zone__count { color: var(--muted); font-size: var(--fs-xs); }
 .map--plan .zone__count { display: none; } /* the dots show who is there */
-.map--plan .dot { font-size: 0.8rem; padding: 2px 8px 2px 3px; }
-.map--plan .dot__swatch { width: 14px; height: 14px; }
-@media (max-width: 500px) {
-  .map--plan .zone { padding: 2px; gap: 2px; }
-  .map--plan .zone__label { font-size: 0.66rem; padding: 0 4px; }
-  .map--plan .dot { font-size: 0.68rem; padding: 1px 5px 1px 2px; gap: 3px; }
-  .map--plan .dot__swatch { width: 10px; height: 10px; border-width: 1px; }
-}
 
-.dots { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.dot {
-  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
-  background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 3px 10px 3px 4px;
-  font-size: 0.9rem; font-weight: 600;
-}
-.dot__name { min-width: 0; overflow-wrap: anywhere; line-height: 1.2; }
-@media (max-width: 500px) {
-  .map { gap: 6px; }
-  .zone { padding: 6px; min-height: 90px; }
-  .dot { font-size: 0.8rem; padding: 2px 6px 2px 3px; gap: 4px; }
-  .dot__swatch { width: 14px; height: 14px; }
-}
-.dot__swatch { width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-block; border: 2px solid rgb(0 0 0 / 0.15); }
-.dot--offline { opacity: 0.5; border-style: dashed; }
-.dot--fall { border: 2px solid var(--bad); color: var(--bad); animation: pulse 1.2s ease-in-out infinite; }
-.dot__swatch--fall { background: #fde8e7; border-color: var(--bad); }
-@keyframes pulse { 50% { box-shadow: 0 0 0 5px rgb(179 38 30 / 0.25); } }
-@media (prefers-reduced-motion: reduce) { .dot--fall { animation: none; } }
-
-.map__off { margin-top: 10px; }
-.map__off[hidden] { display: none; }
-.map__offtitle { font-size: 0.9rem; color: var(--muted); margin: 0 0 6px; }
-
-.mapkey { margin: 0; }
-.mapkey > summary { cursor: pointer; font-weight: 700; font-size: 0.9rem; color: var(--accent); padding: 4px 0; }
-.mapkey__title { font-size: 0.8rem; font-weight: 700; margin: 6px 0 2px; color: var(--text); }
-.mapkey__sub { font-weight: 400; color: var(--muted); }
-.mapkey .legend { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 10px; font-size: 0.78rem; }
-.legend__wide { grid-column: 1 / -1; }
-#legend-incidents[hidden] { display: none; }
-/* Smaller screens: the open key is a panel over the bottom of the map, so it never needs scrolling. */
-@media (max-width: 999px) {
-  .mapwrap__main { flex: 0 1 auto; } /* key right under the map, not at the bottom of the panel */
-  .mapkey { position: relative; }
-  .mapkey[open] > .mapkey__body {
-    position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 6;
-    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 2px 12px 10px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
-  }
-}
-.legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); }
-.legend li { display: inline-flex; align-items: center; gap: 6px; }
-.legend .dot__swatch { width: 14px; height: 14px; }
-
-/* Review, reports, map layers (D5) */
-.btn--small { font-size: 0.85rem; padding: 4px 10px; }
-.btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn--primary:hover { background: #174a95; }
-.btn--confirmed { color: #8a4b00; }
-.btn--dismissed { color: var(--muted); }
-.btn:disabled { opacity: 0.6; cursor: wait; }
-
-.incident__actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-.incident__statusbtns { display: contents; }
-.incident__editor { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
-.incident__editor[hidden] { display: none; }
-.incident__textarea, .report textarea, .report input, .report select {
-  font: inherit; font-size: 0.95rem; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; width: 100%;
-}
-.incident__textarea:focus, .report textarea:focus, .report input:focus, .report select:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
-.incident__editorbtns { display: flex; gap: 6px; }
-.incident__msg { font-size: 0.85rem; color: var(--ok); }
-.incident__msg:empty { display: none; }
-.incident__msg--error { color: var(--bad); }
-.incident--saving { outline: 2px dashed var(--accent); }
-
-#report-open { margin-bottom: 10px; }
-.report {
-  display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 12px; margin-bottom: 12px; background: #fafbfc;
-}
-.report[hidden] { display: none; }
-.report label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 0.9rem; }
-.report label[hidden] { display: none; }
-.report__type { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
-.report__type legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 4px; }
-.report__type label { flex-direction: row; align-items: center; font-weight: 400; font-size: 0.95rem; }
-.report__type input { width: auto; }
-.report__buttons { display: flex; gap: 8px; }
-.report__msg { font-size: 0.9rem; color: var(--ok); margin-bottom: 10px; }
-.report__msg:empty { display: none; }
-.report__msg--error { color: var(--bad); }
-
-.map__controls { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 8px; }
-.map__hours { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; color: var(--muted); }
-.map__hours select { font: inherit; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border); }
-.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.seg__btn { font: inherit; font-size: 0.9rem; font-weight: 600; padding: 5px 14px; border: 0; background: var(--panel); color: var(--muted); cursor: pointer; }
-.seg__btn + .seg__btn { border-left: 1px solid var(--border); }
-.seg__btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
-.seg__btn:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
-
-/* Map layers. The badge is the short text drawn on a zone; empty zones show none. */
-.zone__layer { font-size: 0.78rem; font-weight: 700; border-radius: 6px; padding: 1px 7px; line-height: 1.35; align-self: flex-start; }
-.zone__layer:empty { display: none; }
-/* Incidents layer: confirmed incidents fill the zone red, darker = more */
+/* Incidents layer: confirmed incidents shade the zone red, darker = more (1, 2, 3+) */
 .zone.zone--shade-1 { background: var(--hazard-1); border: 2px solid var(--hazard-edge-1); }
 .zone.zone--shade-2 { background: var(--hazard-2); border: 2px solid var(--hazard-edge-2); }
 .zone.zone--shade-3 { background: var(--hazard-3); border: 2px solid var(--bad); }
-.zone--shade-1 .zone__layer, .zone--shade-2 .zone__layer, .zone--shade-3 .zone__layer { background: var(--bad); color: #fff; }
-/* Heat layer: the zone is tinted in its heat-risk color (same colors as the worker dots) */
-.zone--heat .zone__layer { background: #fff; color: var(--text); border: 1px solid var(--border); }
+/* Heat layer */
 .zone.zone--heat-normal { background: rgb(46 158 79 / 0.22); border: 2px solid var(--heat-normal); }
 .zone.zone--heat-caution { background: rgb(224 177 0 / 0.3); border: 2px solid var(--heat-caution); }
 .zone.zone--heat-extreme_caution { background: rgb(236 122 8 / 0.3); border: 2px solid var(--heat-extreme-caution); }
 .zone.zone--heat-danger { background: rgb(208 49 45 / 0.32); border: 2px solid var(--heat-danger); }
 .zone.zone--heat-extreme_danger { background: rgb(122 13 13 / 0.42); border: 2px solid var(--heat-extreme-danger); }
-/* A new fall: thick pulsing red outline and a "New fall" tag on top of either layer. Never a
-   fill, so a live emergency can't be mistaken for a past hazard. Confirming the fall turns the
-   outline into a red fill. */
-.zone__fall {
-  display: none; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em;
-  background: #fff; color: var(--bad); border: 2px solid var(--bad); border-radius: 6px; padding: 0 5px;
-}
-@media (max-width: 500px) {
-  .map--plan .zone__layer { font-size: 0.62rem; padding: 0 4px; border-radius: 4px; }
-  .map--plan .zone__fall { font-size: 0.6rem; padding: 0 3px; border-width: 1.5px; border-radius: 4px; }
-}
-.zone--fall .zone__fall { display: inline-block; }
+/* An active fall: a red outline on its zone (never a fill), plus the ringed marker */
 .zone.zone--fall { border: 3px solid var(--bad); }
-/* The pulse is its own layer, so the zone itself makes no stacking context and its names can
-   still sit above the fall dots (see "Map stacking" below). */
-.zone--fall::after {
-  content: ""; position: absolute; inset: -3px; border-radius: inherit; pointer-events: none;
-  z-index: 2; animation: zone-pulse 1.2s ease-in-out infinite;
-}
-@keyframes zone-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgb(179 38 30 / 0.55); }
-  50% { box-shadow: 0 0 0 8px rgb(179 38 30 / 0.15); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .zone--fall::after { animation: none; box-shadow: 0 0 0 4px rgb(179 38 30 / 0.45); }
-}
+/* The zone picked in the zone list, and the incident page's zone */
+.zone.zone--selected { outline: 3px solid var(--accent); outline-offset: 1px; }
+.zone.zone--focus { border: 3px solid var(--bad); background: rgb(211 47 47 / 0.12); }
 
-/* Map stacking: zones (no z-index) < pulse outline (2) < fall dots (3) < names and tags (4).
-   Worker names and zone labels are never hidden under fall dots. The name lists let clicks
-   through to the fall dots underneath, except on the names themselves. */
-.map--plan .zone__label, .map--plan .zone__layer, .map--plan .zone__fall, .map--plan .zone .dots { position: relative; z-index: 4; }
+/* Map stacking: zones (no z-index) < markers (3) < names and tags (4) < key (8). Worker names
+   and zone labels are never hidden under a marker; the name lists let clicks through. */
+.map__markers { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.map--plan .zone__label, .map--plan .zone__badge, .map--plan .zone .dots { position: relative; z-index: 4; }
 .map--plan .zone .dots { pointer-events: none; }
 .map--plan .zone .dot { pointer-events: auto; }
 
-/* Worker dots open the worker's card (app.js showCard). */
-.dot { cursor: pointer; }
-.dot:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.worker--flash { animation: worker-flash 1.6s ease-out; }
-@keyframes worker-flash { 0%, 40% { box-shadow: 0 0 0 4px var(--accent); } 100% { box-shadow: 0 0 0 4px transparent; } }
+.marker {
+  position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; padding: 0;
+  border-radius: 50%; border: 2px solid #fff; cursor: pointer; pointer-events: auto;
+  background: #e53935; box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+}
+.marker:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* Active fall alert: one marker with a pulsing ring */
+.marker--alert::after, .marker--focus::after {
+  content: ""; position: absolute; inset: -8px; border-radius: 50%; border: 3px solid rgb(179 38 30 / 0.7);
+}
+.marker--alert::after { animation: marker-ring 1.2s ease-out infinite; }
+@keyframes marker-ring { 0% { transform: scale(0.6); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
+.marker--focus.marker--confirmed { background: #7a0d0d; }
+.marker--focus.marker--dismissed { background: var(--heat-none); }
+.marker--focus.marker--dismissed::after { border-color: rgb(91 98 112 / 0.6); }
+.marker--approx { outline: 2px dashed var(--bad); outline-offset: 2px; }
+.marker--focus.marker--approx::after { border-style: dashed; }
 
-/* A zone too small for its name tags (app.js fitZones): workers become initials in their heat
-   color, labels shrink, so nothing spills into the next zone. The full name is in the tooltip
-   and a tap opens the worker's card. */
+/* Worker dots */
+.dots { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.dot {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 3px 10px 3px 4px;
+  font-size: var(--fs-sm); font-weight: 600;
+}
+.dot:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.dot__name { min-width: 0; overflow-wrap: anywhere; line-height: 1.2; }
+.dot__swatch { width: 16px; height: 16px; border-radius: 50%; flex: none; display: inline-block; border: 2px solid rgb(0 0 0 / 0.15); }
+.dot--offline { opacity: 0.5; border-style: dashed; }
+.dot--fall { border: 2px solid var(--bad); color: var(--bad); animation: pulse 1.2s ease-in-out infinite; }
+.dot--measured { box-shadow: 0 0 0 2px var(--accent); }
+.planhost--mini .dot:not(.dot--near) { opacity: 0.45; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 5px rgb(179 38 30 / 0.25); } }
+.map--plan .dot { font-size: var(--fs-xs); padding: 2px 8px 2px 3px; }
+.map--plan .dot__swatch { width: 14px; height: 14px; }
+
+/* A zone too small for its name tags (map.js fit): initials in the heat color, then one tag */
 .dot__initials { display: none; }
 .map--plan .zone--compact { gap: 2px; padding: 2px; }
-.map--plan .zone--compact .dot {
-  padding: 0; gap: 0; border: 0; border-radius: 50%; background: transparent; font-size: 0.7rem;
-}
+.map--plan .zone--compact .dot { padding: 0; gap: 0; border: 0; border-radius: 50%; background: transparent; }
 .map--plan .zone--compact .dot__swatch, .map--plan .zone--compact .dot__name { display: none; }
 .map--plan .zone--compact .dot__initials {
   display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 3px; border-radius: 11px;
-  font-size: 0.66rem; font-weight: 800; letter-spacing: -0.02em; color: #fff;
-  border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25);
+  font-size: var(--fs-2xs); font-weight: 800; color: #fff; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25);
 }
-/* Dark text on the light heat colors so the initials stay readable */
 .map--plan .zone--compact .dot__initials.heat--caution,
 .map--plan .zone--compact .dot__initials.heat--extreme-caution,
 .map--plan .zone--compact .dot__initials.heat--none { color: var(--text); }
 .map--plan .zone--compact .dot--measured { box-shadow: 0 0 0 2px var(--accent); }
 .map--plan .zone--compact .dot--fall { border: 2px solid var(--bad); }
-.map--plan .zone--compact .zone__label { font-size: 0.62rem; padding: 0 3px; }
-.map--plan .zone--compact .zone__layer, .map--plan .zone--compact .zone__fall { font-size: 0.56rem; padding: 0 3px; }
-@media (max-width: 500px) {
-  .map--plan .zone--compact .dot__initials { min-width: 18px; height: 18px; padding: 0 2px; font-size: 0.56rem; border-width: 1px; }
-}
-/* Still too small: one "3 workers" tag instead of separate dots (the Workers tab has them all). */
+.map--plan .zone--compact .zone__label, .map--plan .zone--compact .zone__badge { font-size: var(--fs-2xs); padding: 0 3px; }
 .map--plan .zone--tight .dots { display: none; }
 .map--plan .zone--tight .zone__count {
-  display: inline-block; position: relative; z-index: 4; font-size: 0.56rem; font-weight: 700; color: var(--text);
+  display: inline-block; position: relative; z-index: 4; font-size: var(--fs-2xs); font-weight: 700; color: var(--text);
   background: rgb(255 255 255 / 0.92); border: 1px solid var(--accent); border-radius: 6px; padding: 0 3px;
 }
 
-/* Fall dots on the floor plan. Solid = at its GPS position; dashed ring = approximate (a steady
-   spot inside the zone it was recorded in). Bright = not reviewed, dark = confirmed. */
-.map__markers { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
-.map__markers[hidden] { display: none; }
-.marker {
-  position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; padding: 0;
-  border-radius: 50%; border: 2px solid #fff; cursor: pointer; pointer-events: auto;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+/* --- Medium screens: no worker list column (search is in the Workers section) --- */
+@media (max-width: 1099px) {
+  .app { grid-template-columns: var(--rail-w) minmax(0, 1fr); }
+  .people { display: none; }
+  .zonepanel {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 9; max-height: 60%;
+    box-shadow: 0 -6px 24px rgb(0 0 0 / 0.18);
+  }
+  .heatgrid, .pagegrid { grid-template-columns: minmax(0, 1fr); }
 }
-.marker:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.marker--new { background: #e53935; }
-.marker--confirmed { background: #7a0d0d; }
-.marker--approx { outline: 2px dashed var(--bad); outline-offset: 2px; }
-.marker--alert { animation: marker-pulse 1.2s ease-in-out infinite; }
-@keyframes marker-pulse { 50% { transform: scale(1.35); } }
-@media (prefers-reduced-motion: reduce) { .marker--alert { animation: none; } }
-@media (max-width: 500px) { .marker { width: 12px; height: 12px; margin: -6px 0 0 -6px; } }
-.map__calibrate { font-size: 0.9rem; background: var(--warn-bg); border-radius: 8px; padding: 6px 10px; }
 
-/* Workers located by beacons or GPS (not just set by hand) */
-.dot--measured { box-shadow: 0 0 0 2px var(--accent); }
-.worker__located { font-size: 0.85rem; color: var(--accent); }
-.worker__located:empty { display: none; }
-.tag--measured { background: #e3ecfa; color: #174a95; }
+/* --- Phones: the rail becomes a bar at the bottom; tables become stacked rows --- */
+@media (max-width: 700px) {
+  :root { --gap: 12px; }
+  .topbar { padding: 8px 10px; gap: 8px; }
+  .brand h1 { font-size: var(--fs-lg); }
+  .subtitle { display: none; }
+  .topbar .btn, .conn { font-size: var(--fs-xs); padding: 3px 8px; }
+  .alert { margin: 8px 8px 0; gap: 8px; }
+  .alert__link { font-size: var(--fs-xs); }
+  .app { grid-template-columns: minmax(0, 1fr); margin-top: 8px; }
+  .main { padding: 12px 10px calc(76px + env(safe-area-inset-bottom)); }
+  .rail {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; flex-direction: row; gap: 2px;
+    padding: 4px 6px calc(4px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 10px rgb(0 0 0 / 0.08);
+  }
+  .rail__item { flex: 1; padding: 6px 2px; }
+  .rail__item svg { width: 22px; height: 22px; }
+  .rail__count { top: 0; right: auto; left: calc(50% + 6px); }
+  .card { padding: 12px; }
+  .search--inline { width: 100%; }
 
-/* Map key */
-.legend__marker { position: relative; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; display: inline-block; flex: none; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.3); }
-.legend__marker.marker--approx { outline: 2px dashed var(--bad); outline-offset: 2px; margin: 0 3px; }
-.legend__located { width: 18px; height: 18px; border-radius: 50%; display: inline-block; flex: none; box-shadow: 0 0 0 2px var(--accent); background: var(--panel); }
-.legend[hidden] { display: none; }
-.legend__title { font-weight: 700; color: var(--text); }
-.legend__zone { width: 24px; height: 14px; border-radius: 3px; display: inline-block; flex: none; }
-.legend__zone--shade-1 { background: var(--hazard-1); border: 2px solid var(--hazard-edge-1); }
-.legend__zone--shade-2 { background: var(--hazard-2); border: 2px solid var(--hazard-edge-2); }
-.legend__zone--shade-3 { background: var(--hazard-3); border: 2px solid var(--bad); }
-.legend__zone--fall { border: 3px solid var(--bad); box-shadow: 0 0 0 2px rgb(179 38 30 / 0.35); }
+  .table, .table tbody, .table tr, .table td { display: block; }
+  .table thead { display: none; }
+  .table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 10px 12px; border-bottom: 1px solid #eceef2; }
+  .table tbody tr:last-child { border-bottom: 0; }
+  .table td { padding: 0; border: 0; }
+  .table .num { text-align: right; }
+  /* incidents: when | status / worker | peak g / zone | type */
+  .table--incidents td:nth-child(1) { grid-area: 1 / 1; }
+  .table--incidents td:nth-child(6) { grid-area: 1 / 2; justify-self: end; }
+  .table--incidents td:nth-child(2) { grid-area: 2 / 1; font-weight: 600; }
+  .table--incidents td:nth-child(5) { grid-area: 2 / 2; }
+  .table--incidents td:nth-child(3) { grid-area: 3 / 1; }
+  .table--incidents td:nth-child(4) { grid-area: 3 / 2; text-align: right; }
+  .table--incidents td:nth-child(7) { display: none; }
+  /* workers: who | status / zone | heat index (last seen dropped) */
+  .table--workers td:nth-child(1) { grid-area: 1 / 1; }
+  .table--workers td:nth-child(2) { grid-area: 1 / 2; justify-self: end; }
+  .table--workers td:nth-child(3) { grid-area: 2 / 1; }
+  .table--workers td:nth-child(4) { grid-area: 2 / 2; }
+  .table--workers td:nth-child(5) { display: none; }
+  /* heat: who | risk / zone | heat index / air | humidity */
+  .table--heat td:nth-child(1) { grid-area: 1 / 1; font-weight: 600; }
+  .table--heat td:nth-child(6) { grid-area: 1 / 2; justify-self: end; }
+  .table--heat td:nth-child(2) { grid-area: 2 / 1; }
+  .table--heat td:nth-child(5) { grid-area: 2 / 2; }
+  .table--heat td:nth-child(3) { grid-area: 3 / 1; color: var(--muted); }
+  .table--heat td:nth-child(3)::before { content: "Air "; }
+  .table--heat td:nth-child(4) { grid-area: 3 / 2; color: var(--muted); }
+  .table--heat td:nth-child(4)::before { content: "Humidity "; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alert[data-state="active"], .alert[data-state="active"] .alert__icon, .marker--alert::after, .dot--fall { animation: none; }
+}

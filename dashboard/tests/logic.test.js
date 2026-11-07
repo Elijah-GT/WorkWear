@@ -4,9 +4,11 @@ import { test } from "node:test";
 
 import {
   checkNewFalls, dotLabel, formatAgo, formatClock, formatReading, hazardView, heatInfo, heatLevelFor,
-  incidentBadges, incidentPlace, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout,
+  incidentPills, statusPill, sampleState, incidentPlace, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout,
   namePatch, notesPatch, reportBody, statusActions, summarize, zoneHeatView, zoneName, zoneOptions, zonePatch,
   fallMarkers, isMeasured, markerWhere, workerZone, zoneSourceText, zoneSpot, initials,
+  parseRoute, routeHash, searchWorkers, workerStatus, filterIncidents, STATUS_FILTERS, tableTime, alertSummary,
+  locationText, incidentTimeline, heatRows, incidentSpot,
 } from "../logic.js";
 
 test("initials: short labels for worker dots in small zones", () => {
@@ -126,12 +128,24 @@ test("incidentTitle names each type", () => {
   assert.equal(incidentTitle("other"), "other");
 });
 
-test("incidentBadges shows status, sample data, and late arrival", () => {
-  const labels = (i) => incidentBadges(i).map((b) => b.label);
-  assert.deepEqual(labels(inc()), ["New"]);
+test("incidentPills: status (new shows as Pending), sample when asked, and late arrival", () => {
+  const labels = (i, o) => incidentPills(i, o).map((b) => b.label);
+  assert.deepEqual(labels(inc()), ["Pending"]);
   assert.deepEqual(labels(inc({ status: "confirmed", sample: true, delayed: true })),
-    ["Confirmed", "Sample data", "Arrived late"]);
-  assert.equal(incidentBadges(inc({ status: "dismissed" }))[0].css, "badge--dismissed");
+    ["Confirmed", "Sample", "Arrived late"]);
+  assert.deepEqual(labels(inc({ sample: true }), { showSample: false }), ["Pending"]);
+  assert.equal(incidentPills(inc({ status: "dismissed" }))[0].css, "pill--dismissed");
+  assert.equal(statusPill("new").css, "pill--pending");
+});
+
+test("sampleState: header badge when any sample data; row labels only when mixed with real data", () => {
+  const sim = { device_id: "sim-01" };
+  const real = { device_id: "helmet-01" };
+  assert.deepEqual(sampleState([], []), { any: false, mixed: false });
+  assert.deepEqual(sampleState([sim], [{ sample: true }]), { any: true, mixed: false });
+  assert.deepEqual(sampleState([sim, real], [{ sample: true }]), { any: true, mixed: true });
+  assert.deepEqual(sampleState([sim], [{ sample: true }, { sample: false }]), { any: true, mixed: true });
+  assert.deepEqual(sampleState([real], [{ sample: false }]), { any: false, mixed: false });
 });
 
 test("incidentWho uses the snapshot name, the device, or says manual report", () => {
@@ -471,4 +485,93 @@ test("the shipped zones.json is a valid floor plan with labeled zones", () => {
     assert.ok(z.id.length <= 32, `zone ${z.id} fits the server's 32-character limit`);
     assert.ok(!/\s/.test(z.id), `zone ${z.id} has no spaces`);
   }
+});
+
+// --- D12: sections, pages, worker list, incidents table, timeline ---------------------------
+
+test("parseRoute: sections, incident and worker pages, anything else is the map", () => {
+  assert.deepEqual(parseRoute("#/incidents"), { view: "incidents", id: null, section: "incidents" });
+  assert.deepEqual(parseRoute("#/incident/42"), { view: "incident", id: 42, section: "incidents" });
+  assert.deepEqual(parseRoute("#/worker/sim-01"), { view: "worker", id: "sim-01", section: "workers" });
+  assert.deepEqual(parseRoute("#/worker/a%20b"), { view: "worker", id: "a b", section: "workers" });
+  for (const bad of ["", "#", "#map", "#/nope", "#/incident/abc", "#/incident", "#/worker/%E0%A4%A", "#/heat/1"]) {
+    assert.equal(parseRoute(bad).view, "map", bad);
+  }
+  assert.equal(routeHash("worker", "a b"), "#/worker/a%20b");
+  assert.equal(routeHash("heat"), "#/heat");
+  assert.deepEqual(parseRoute(routeHash("worker", "x/y")), { view: "worker", id: "x/y", section: "workers" });
+});
+
+test("searchWorkers matches name or device ID, any case, sorted by name", () => {
+  const list = [dev("sim-02", null, "Zed"), dev("helmet-01", null, "alex"), dev("sim-03", null, "Bea")];
+  assert.deepEqual(searchWorkers(list, "").map((d) => d.name), ["alex", "Bea", "Zed"]);
+  assert.deepEqual(searchWorkers(list, "SIM").map((d) => d.name), ["Bea", "Zed"]);
+  assert.deepEqual(searchWorkers(list, " ale ").map((d) => d.name), ["alex"]);
+  assert.deepEqual(searchWorkers(list, "nobody"), []);
+});
+
+test("workerStatus: new fall, then offline, then heat risk", () => {
+  const d = { ...dev("sim-01", null), latest: { heat_level: "caution" } };
+  assert.equal(workerStatus(d).css, "heat--caution");
+  assert.equal(workerStatus({ ...d, online: false }).key, "offline");
+  assert.equal(workerStatus({ ...d, online: false }, new Set(["sim-01"])).key, "fall");
+  assert.equal(workerStatus(dev("sim-01", null)).label, "No heat reading");
+});
+
+test("filterIncidents: newest first by time, by status, device, zone, and time window", () => {
+  const list = [
+    inc({ id: 9, ts: "2026-11-04T10:00:00Z", status: "confirmed", zone: "A" }), // seeded: high ID, old
+    inc({ id: 3, ts: "2026-11-07T10:00:00Z", status: "new", zone: "B" }),
+    inc({ id: 4, ts: "2026-11-06T10:00:00Z", status: "dismissed", zone: "A", device_id: "sim-01" }),
+  ];
+  assert.deepEqual(filterIncidents(list).map((i) => i.id), [3, 4, 9]);
+  assert.deepEqual(filterIncidents(list, { status: "new" }).map((i) => i.id), [3]);
+  assert.deepEqual(filterIncidents(list, { zone: "A" }).map((i) => i.id), [4, 9]);
+  assert.deepEqual(filterIncidents(list, { deviceId: "sim-01" }).map((i) => i.id), [4]);
+  assert.deepEqual(filterIncidents(list, { sinceMs: Date.parse("2026-11-06T00:00:00Z") }).map((i) => i.id), [3, 4]);
+  assert.deepEqual(STATUS_FILTERS.map((f) => f.label), ["All", "Pending", "Confirmed", "Dismissed"]);
+});
+
+test("tableTime and alertSummary", () => {
+  const t = tableTime("2026-11-07T10:31:00Z", Date.parse("2026-11-07T12:31:00Z"), { locale: "en-GB", timeZone: "UTC" });
+  assert.deepEqual(t, { when: "7 Nov, 10:31", ago: "2 h ago" });
+  const zones = { zones: [{ id: "1520-S", label: "1520 South" }] };
+  const opts = { locale: "en-GB", timeZone: "UTC" };
+  assert.equal(alertSummary(inc({ worker_name: "Sam R.", zone: "1520-S", ts: "2026-11-07T10:31:00Z", peak_g: 6.1 }), zones, opts),
+    "Sam R. · 1520 South · 10:31 · 6.1 g");
+  assert.equal(alertSummary(inc({ worker_name: null, device_id: "sim-01", zone: null, ts: "2026-11-07T10:31:00Z", peak_g: null }), zones, opts),
+    "sim-01 · No zone · 10:31");
+});
+
+test("locationText says how a zone was found, and calls a hand-set zone simulated", () => {
+  assert.equal(locationText("beacon"), "Located by BLE beacons");
+  assert.equal(locationText("gps"), "Located by GPS");
+  assert.match(locationText("manual"), /simulated/);
+  assert.match(locationText(null), /simulated/);
+  assert.equal(locationText("manual", false), "No zone");
+});
+
+test("incidentTimeline only shows times that are known", () => {
+  const steps = (i, o) => incidentTimeline(i, o).map((s) => [s.key, s.done, s.ts !== null]);
+  assert.deepEqual(steps(inc()), [["received", true, true], ["alert", false, false], ["review", false, false]]);
+  assert.deepEqual(steps(inc({ status: "confirmed", delayed: true }), { alertShownAt: "2026-11-07T10:00:00Z" }),
+    [["received", true, true], ["late", true, false], ["alert", true, true], ["review", true, false]]);
+  const report = incidentTimeline(inc({ type: "injury_report", status: "dismissed" }));
+  assert.deepEqual(report.map((s) => s.key), ["received", "review"]);
+  assert.equal(report[1].label, "Dismissed");
+  assert.match(report[0].label, /Injury report entered/);
+});
+
+test("heatRows: hottest first, no reading last, then by name", () => {
+  const d = (name, hi) => ({ ...dev(name, null, name), latest: hi === null ? null : { heat_index_c: hi } });
+  assert.deepEqual(heatRows([d("a", null), d("b", 25), d("c", 31), d("d", null)]).map((x) => x.name), ["c", "b", "a", "d"]);
+});
+
+test("incidentSpot places any incident, reports and dismissed ones too", () => {
+  const layout = planLayout();
+  const spot = incidentSpot(fallInc({ type: "injury_report", status: "dismissed" }), layout);
+  assert.equal(spot.exact, false);
+  assert.equal(incidentSpot(fallInc({ plan_x: 125, plan_y: 300 }), layout).exact, true);
+  assert.equal(incidentSpot(fallInc({ zone: "nowhere" }), layout), null);
+  assert.equal(incidentSpot(fallInc(), mapLayout(grid, [])), null);
 });

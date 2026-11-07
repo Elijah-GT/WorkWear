@@ -127,6 +127,27 @@ Five people, five workstreams. Owners are TBD: write your name next to a task be
   - Clicking or tapping any worker dot opens the Workers tab and highlights that worker's card (phones have no hover to show the full name). Dots can be reached with Tab and opened with Enter.
   - Checked in Chrome. Phone 390x844: with 3 workers each in 1522 (66x112 px), 1533 (122x68) and 1520 North (122x91), all three switched to initials with no tag outside its zone. 6 workers in 1522 switched to the single tag, also with no spill. Tapping a dot opened the Workers tab with that card highlighted and on screen. Laptop 1366x768: the same 3-per-zone test kept full names everywhere with no spill. The crowded zones were made by copying dots in the page for the test (the simulator rarely puts 3 workers in one zone). 49 `node --test` tests (1 new: `initials`).
 
+- [x] **D12. Layout restyle (branch `dashboard-restyle`).** *Claude (for Elijah, who gave Triax Spot-r screenshots as layout ideas only: no colors, names, icons or assets copied), 2026-11-07.* Colors and status colors unchanged; one font and one type scale (11/12/14/16/20/24 px); one pill style; API unchanged.
+  - **Shell:** icon rail (Map, Workers, Incidents, Heat, Settings) with counts, and a searchable worker list beside it (hard-hat avatar colored by status, name, device ID). The address follows the page (`#/map`, `#/incident/<id>`, `#/worker/<id>`), so Back works. Phones: the rail is a bottom bar; the worker list is the Workers section. 700-1100 px: no list column.
+  - **Alert line:** one slim 40 px line in the existing red: worker, zone, time, peak g, "+N more new falls", Show in list, and ×. Same fixed slot as D10, so nothing moves.
+  - **Incidents:** a table (date and time, worker, zone, type, peak g, status pill, View), newest by time, with a status filter (All, Pending, Confirmed, Dismissed; "Pending" = the API's `new`). The report form is kept. Stacked rows on phones.
+  - **Incident page:** a mini floor plan with the zone highlighted and the spot marked (exact with GPS, else approximate), workers in that zone now, details, Confirm, Dismiss, Mark new, Add or edit note, and a timeline (received, arrived late, alert shown here, review status; see findings for what can't be timed).
+  - **Worker profile:** rename, status pills, zone now and how it was found (beacons, GPS, or set on the dashboard = simulated), the zone picker, air temperature, humidity, heat index and heat risk (never body temperature), helmet details, and recent incidents.
+  - **Map:** one shaded count per zone (confirmed only, 1, 2, 3+); no dot per past incident. An active alert is one marker with a pulsing ring, plus a red zone outline. Click a zone to list its incidents. A small collapsible "Key" in the map's corner. The Incidents/Heat switch became the **Heat** section (heat-tinted map plus a table of workers by heat index).
+  - **Sample data:** `server/seed.py` adds 8 sample incidents over 4 days and 5 zones (1 pending). `--reset` backs up the database and replaces only sample incidents. A single "Sample data" header badge, with per-row pills only when real data is mixed in (decision in section 8). Ran it on the dev database: 169 simulator falls replaced (backups `server/workwear.db.bak-*`). The simulator now runs without `--fall-every`.
+  - Code: `app.js` (views and router), new `map.js` (one floor-plan component for Map, Heat and the incident page), and new `ui.js` (helpers).
+  - Checked in Chrome at 1366x768, 820x1180 and 390x844:
+    - The map fits with no page scroll.
+    - Zone counts match `/api/hazards`.
+    - A zone click lists its 4 incidents; the Key opens and closes.
+    - Incident #9: Confirm, add a note, clear the note, Mark new all saved (state restored afterwards).
+    - Rename on the profile saved and was renamed back.
+    - Search filters both lists.
+    - Two test falls posted to `/api/event`: the alert line, map and main area kept the same position and size; one ringed marker in 1520 South; "+1 more new fall"; Show in list highlighted the row. Both were dismissed, then the sample history was reset.
+    - No sideways scroll on any section.
+  - Tests: 59 `node --test` (10 new), 168 pytest (3 new for `seed.py`).
+  - Not done: anything needing API changes (review times), messaging, device setup, mobile app.
+
 Original task list (covered by the phases above):
 - [x] Device list with names and status, incident list, zone map on a floor-plan image, heat color per worker. *(Floor plan added in D7.)*
 - [x] Zone picker per device, labeled "simulated location". Incidents with `sample: true` labeled "sample data".
@@ -194,6 +215,11 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 | 2026-11-07 | **Changed decision (Elijah):** measured location beats the dashboard zone. Server zone order: helmet's beacon zone, then GPS zone (needs `gps_points`), then dashboard zone; each has a `zone_source`. Replaces "the helmet's own zone is ignored" from S2. CLAUDE.md and PROTOCOL.md updated | Elijah / Claude |
 | 2026-11-07 | Location limits: the NEO-6M gets no fix indoors and is only good to about 3-5 m outdoors (often 10 m+ near buildings), too coarse for zones inside 1520. BLE beacon zones are room-level and will flicker between neighbouring zones in one open room; separate rooms (1522, 1533) work better. With Bluetooth the helmet program is 1.8 MB and needs the Huge APP partition scheme | Claude |
 | 2026-11-07 | A GPS fix outside every zone keeps the dashboard zone (a 10 m GPS error shouldn't move a worker out of their zone), but the fall dot is still drawn at the GPS spot | Claude |
+| 2026-11-07 | **Sample labeling (Elijah asked for one header badge; rule for mixed data proposed by Claude and accepted):** a single "Sample data" badge in the header while simulated helmets or sample incidents are on. When real helmets or real incidents are also present, each sample row gets its own Sample pill as well; an incident page always says it is sample data. CLAUDE.md updated | Elijah / Claude |
+| 2026-11-07 | The incident timeline cannot show **when** an incident was confirmed or dismissed: the server stores no review time, and the API was kept unchanged. "Alert shown" is only known for alerts this browser showed. Adding a `reviewed_ts` field would need a PROTOCOL.md change | Claude |
+| 2026-11-07 | `/api/hazards` reads every telemetry row for the heat column. After ~26,000 rows (hours of simulator data) on WSL's `/mnt/c` it takes 0.5-0.8 s and sometimes over the dashboard's 2 s timeout, so "Can't reach server" flickers. Not fixed (server change). Fix later: an index on `telemetry(zone, ts, heat_index_c)`, or a fresh database before the demo | Claude |
+| 2026-11-07 | SQLite reuses the ID of a deleted last row, so after `seed.py --reset` new incidents can get IDs that were used before. Old `#/incident/<id>` links may then open a different incident. Harmless for the demo | Claude |
+| 2026-11-07 | `server/workwear.db` has one real (not sample) incident, #1: a manual injury report in 1520 North with no helmet, entered while testing earlier. Because of it, real and sample data count as mixed and every sample row shows a Sample pill. Delete it (or start a fresh database) if only the header badge should show | Claude |
 | | Battery runtime with Wi-Fi + GPS on: TBD (measure) | |
 | | Threshold values after tuning: TBD | |
 

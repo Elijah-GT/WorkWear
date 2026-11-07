@@ -11,3 +11,5 @@ firmware/secrets.h
 *.db
 *.db-wal
 *.db-shm
+# Backups made by server/seed.py --reset
+*.db.bak-*

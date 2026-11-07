@@ -72,6 +72,15 @@ If the server is down, the simulator prints one warning and keeps retrying falls
 
 These locations are pretend, from simulated helmets: everything they send is still sample data.
 
+### Sample incident history
+
+```bash
+python3 seed.py            # add 8 sample incidents over the last few days (refuses if some exist)
+python3 seed.py --reset    # replace them: backs up the database, deletes ONLY sample incidents, adds the 8
+```
+
+The history is spread over 4 days and 5 zones; one fall is left Pending and the rest are confirmed or dismissed, as if reviewed. Every incident is marked sample data and belongs to a `sim-` helmet. `--reset` also removes falls the simulator made with `--fall-every`; real helmet data is never touched, and the backup is saved as `workwear.db.bak-YYYYMMDD-HHMMSS` next to the database (git ignores it). For demos, prefer a long `--fall-every` (e.g. 600) so the list stays short.
+
 ## 5. Let the ESP32 reach the server
 
 The helmet and the laptop must be on the **same 2.4 GHz network** (a phone hotspot; campus Wi-Fi often blocks device-to-device traffic).
@@ -127,5 +136,6 @@ server/
   app/models.py   request shapes (bad requests get a 422)
   app/heat.py     heat index -> heat_level bands
   simulator.py    fake helmets
+  seed.py         sample incident history for demos
   tests/          pytest tests, one file per area
 ```

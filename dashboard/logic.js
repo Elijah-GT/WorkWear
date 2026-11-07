@@ -101,18 +101,37 @@ export function incidentTitle(type) {
   return INCIDENT_TITLES[type] ?? type;
 }
 
-const STATUS_BADGES = {
-  new: { label: "New", css: "badge--new" },
-  confirmed: { label: "Confirmed", css: "badge--confirmed" },
-  dismissed: { label: "Dismissed", css: "badge--dismissed" },
+// One pill style across the app (style.css .pill). The API's "new" is shown as "Pending":
+// a supervisor has not reviewed it yet.
+const STATUS_PILLS = {
+  new: { label: "Pending", css: "pill--pending" },
+  confirmed: { label: "Confirmed", css: "pill--confirmed" },
+  dismissed: { label: "Dismissed", css: "pill--dismissed" },
 };
 
-// Badges for an incident row: status, then "Sample data" and "Arrived late" when they apply.
-export function incidentBadges(inc) {
-  const badges = [STATUS_BADGES[inc.status] ?? { label: inc.status, css: "badge--dismissed" }];
-  if (inc.sample) badges.push({ label: "Sample data", css: "badge--sample" });
-  if (inc.delayed) badges.push({ label: "Arrived late", css: "badge--late" });
-  return badges;
+export function statusPill(status) {
+  return STATUS_PILLS[status] ?? { label: String(status), css: "pill--dismissed" };
+}
+
+// Pills for an incident: status, "Arrived late" when it applies, and "Sample" only when asked
+// (the header badge covers sample data unless real and sample data are mixed: sampleState).
+export function incidentPills(inc, { showSample = true } = {}) {
+  const pills = [statusPill(inc.status)];
+  if (inc.sample && showSample) pills.push({ label: "Sample", css: "pill--sample" });
+  if (inc.delayed) pills.push({ label: "Arrived late", css: "pill--late" });
+  return pills;
+}
+
+// Is sample data on screen, and is it mixed with real data? With only sample data, one
+// "Sample data" badge in the header labels everything; once a real helmet or a real incident
+// is there too, each sample row needs its own label so the two can be told apart.
+export function sampleState(devices, incidents) {
+  const simDevices = devices.filter((d) => isSimulated(d.device_id)).length;
+  const sampleIncidents = incidents.filter((i) => i.sample).length;
+  const realDevices = devices.length - simDevices;
+  const realIncidents = incidents.length - sampleIncidents;
+  const any = simDevices + sampleIncidents > 0;
+  return { any, mixed: any && realDevices + realIncidents > 0 };
 }
 
 // Who it happened to. worker_name is the name when the incident was created; it equals
@@ -297,28 +316,34 @@ export function zoneSpot(id) {
 // Returns markers oldest first, so newer ones are drawn on top.
 export function fallMarkers(incidents, layout, { nowMs = Date.now(), hours = null } = {}) {
   if (layout?.mode !== "plan") return [];
-  const cells = new Map(layout.cells.map((c) => [c.id, c]));
   const since = hours ? nowMs - hours * 3600 * 1000 : null;
   const out = [];
   for (const inc of incidents) {
     if (inc.type !== "fall" || inc.status === "dismissed") continue;
     if (since !== null && Date.parse(inc.ts) < since) continue;
-    const base = { id: inc.id, status: inc.status, zone: inc.zone ?? null };
-    const onPlan = isNum(inc.plan_x) && isNum(inc.plan_y)
-      && inc.plan_x >= 0 && inc.plan_x <= layout.width && inc.plan_y >= 0 && inc.plan_y <= layout.height;
-    if (onPlan) {
-      out.push({ ...base, exact: true, source: "gps",
-        left: pct(inc.plan_x, layout.width), top: pct(inc.plan_y, layout.height) });
-      continue;
-    }
-    const cell = inc.zone ? cells.get(inc.zone) : undefined;
-    if (!cell) continue;
-    const [u, v] = zoneSpot(inc.id);
-    out.push({ ...base, exact: false, source: inc.zone_source ?? "manual",
-      left: Math.round((cell.left + cell.width * u) * 1000) / 1000,
-      top: Math.round((cell.top + cell.height * v) * 1000) / 1000 });
+    const spot = incidentSpot(inc, layout);
+    if (spot) out.push(spot);
   }
   return out.sort((a, b) => a.id - b.id);
+}
+
+// Where one incident goes on the floor plan (any type or status): exactly at its GPS spot when
+// that is on the plan, else at a steady spot inside its zone (approximate). null if neither.
+export function incidentSpot(inc, layout) {
+  if (layout?.mode !== "plan") return null;
+  const base = { id: inc.id, status: inc.status, zone: inc.zone ?? null };
+  const onPlan = isNum(inc.plan_x) && isNum(inc.plan_y)
+    && inc.plan_x >= 0 && inc.plan_x <= layout.width && inc.plan_y >= 0 && inc.plan_y <= layout.height;
+  if (onPlan) {
+    return { ...base, exact: true, source: "gps",
+      left: pct(inc.plan_x, layout.width), top: pct(inc.plan_y, layout.height) };
+  }
+  const cell = inc.zone ? layout.cells.find((c) => c.id === inc.zone) : undefined;
+  if (!cell) return null;
+  const [u, v] = zoneSpot(inc.id);
+  return { ...base, exact: false, source: inc.zone_source ?? "manual",
+    left: Math.round((cell.left + cell.width * u) * 1000) / 1000,
+    top: Math.round((cell.top + cell.height * v) * 1000) / 1000 };
 }
 
 // Tooltip text for a fall marker: where the dot is and how sure we are.
@@ -395,6 +420,119 @@ export function hazardView(entry) {
     text: `${n} confirmed incident${n === 1 ? "" : "s"}${sample}`,
     badge: `${n} incident${n === 1 ? "" : "s"}${tag}`,
   };
+}
+
+// --- App sections and pages (D12) -----------------------------------------------
+
+export const SECTIONS = ["map", "workers", "incidents", "heat", "settings"];
+
+// The address after "#": "#/incident/42" -> { view: "incident", id: 42, section: "incidents" }.
+// Sections are "#/map", "#/workers", ... Pages are "#/incident/<id>" and "#/worker/<device id>".
+// Anything else shows the map. ("#/..." and not "#map", which would jump to the element.)
+export function parseRoute(hash) {
+  let parts;
+  try {
+    parts = String(hash ?? "").replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+  } catch {
+    parts = []; // a malformed %-escape
+  }
+  const [view, id] = parts;
+  if (SECTIONS.includes(view) && parts.length === 1) return { view, id: null, section: view };
+  if (view === "incident" && parts.length === 2 && /^\d+$/.test(id)) return { view, id: Number(id), section: "incidents" };
+  if (view === "worker" && parts.length === 2) return { view, id, section: "workers" };
+  return { view: "map", id: null, section: "map" };
+}
+
+export function routeHash(view, id = null) {
+  return id === null || id === undefined ? `#/${view}` : `#/${view}/${encodeURIComponent(id)}`;
+}
+
+// The worker list: name or device ID contains the search text (any case), sorted by name.
+export function searchWorkers(devices, query) {
+  const q = String(query ?? "").trim().toLowerCase();
+  const hit = (d) => d.name.toLowerCase().includes(q) || d.device_id.toLowerCase().includes(q);
+  return (q ? devices.filter(hit) : [...devices]).sort(byName);
+}
+
+// Avatar color and words for a worker: a new fall first, then offline, then heat risk.
+export function workerStatus(device, fallenIds = new Set()) {
+  if (fallenIds.has(device.device_id)) return { key: "fall", label: "New fall", css: "status--fall" };
+  if (!device.online) return { key: "offline", label: "Offline", css: "status--offline" };
+  const level = device.latest?.heat_level ?? null;
+  const info = heatInfo(level);
+  return { key: level ?? "none", label: level ? `${info.label} heat risk` : "No heat reading", css: info.css };
+}
+
+// Newest first by time. (Seeded history can have higher IDs than newer real incidents.)
+export function sortNewestFirst(incidents) {
+  return [...incidents].sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts) || b.id - a.id);
+}
+
+export const STATUS_FILTERS = [
+  { value: "", label: "All" },
+  { value: "new", label: "Pending" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "dismissed", label: "Dismissed" },
+];
+
+// Incidents for a table or list, newest first. Every option is optional.
+export function filterIncidents(incidents, { status = "", deviceId = null, zone = null, sinceMs = null } = {}) {
+  return sortNewestFirst(incidents.filter((i) => (!status || i.status === status)
+    && (deviceId === null || i.device_id === deviceId)
+    && (zone === null || i.zone === zone)
+    && (sinceMs === null || Date.parse(i.ts) >= sinceMs)));
+}
+
+// Date and time for the incidents table: { when: "7 Nov, 10:31", ago: "2 h ago" }.
+export function tableTime(ts, nowMs, opts = {}) {
+  const at = new Date(ts);
+  const { locale, timeZone } = opts;
+  const date = at.toLocaleDateString(locale, { timeZone, day: "numeric", month: "short" });
+  const time = at.toLocaleTimeString(locale, { timeZone, hour: "2-digit", minute: "2-digit" });
+  return { when: `${date}, ${time}`, ago: formatAgo(nowMs - at.getTime()) };
+}
+
+// The slim alert line: "Sam R. · 1520 South · 10:31 · 6.1 g".
+export function alertSummary(fall, zonesConfig, opts = {}) {
+  const at = new Date(fall.ts).toLocaleTimeString(opts.locale, { timeZone: opts.timeZone, hour: "2-digit", minute: "2-digit" });
+  const parts = [fall.worker_name || fall.device_id || "Unknown helmet",
+    fall.zone ? zoneName(zonesConfig, fall.zone) : "No zone", at];
+  if (fall.peak_g != null) parts.push(`${fall.peak_g} g`);
+  return parts.join(" · ");
+}
+
+// How a zone was found. Set by hand on the dashboard is labeled simulated (CLAUDE.md).
+export function locationText(source, hasZone = true) {
+  if (!hasZone) return "No zone";
+  if (source === "beacon") return "Located by BLE beacons";
+  if (source === "gps") return "Located by GPS";
+  return "Set on the dashboard (simulated location)";
+}
+
+// Steps for an incident page. Only times the system knows are shown: when the server got it,
+// and when this screen showed the alert. Review times are not stored (the API has none).
+export function incidentTimeline(inc, { alertShownAt = null } = {}) {
+  const steps = [];
+  steps.push(inc.type === "fall"
+    ? { key: "received", label: "Fall detected by the helmet, received by the server", ts: inc.ts, done: true }
+    : { key: "received", label: `${incidentTitle(inc.type)} entered on the dashboard`, ts: inc.ts, done: true });
+  if (inc.delayed) {
+    steps.push({ key: "late", label: "Arrived late: the helmet held it while it was offline", ts: null, done: true });
+  }
+  if (inc.type === "fall") {
+    steps.push(alertShownAt
+      ? { key: "alert", label: "Alert shown on this screen", ts: alertShownAt, done: true }
+      : { key: "alert", label: "No alert on this screen (it came in before the page was opened)", ts: null, done: false });
+  }
+  const review = { new: "Waiting for review", confirmed: "Confirmed", dismissed: "Dismissed" };
+  steps.push({ key: "review", label: review[inc.status] ?? String(inc.status), ts: null, done: inc.status !== "new" });
+  return steps;
+}
+
+// The Heat section's table: highest heat index first, workers with no reading last.
+export function heatRows(devices) {
+  const hi = (d) => d.latest?.heat_index_c ?? -Infinity;
+  return [...devices].sort((a, b) => (hi(b) - hi(a)) || byName(a, b));
 }
 
 // Heat layer for one zone: the highest heat index seen there in the time window.

@@ -8,136 +8,293 @@
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
 </head>
-<body data-view="map">
+<body data-section="map" data-view="map">
+  <!-- Icons, drawn for this dashboard. Used with <svg><use href="#i-..."/></svg>. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z M9 4v13.5 M15 6.5V20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-workers" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 13.6c2.9-.2 5 1.8 5 4.9"/></g></symbol>
+    <symbol id="i-incidents" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M8 8.5h8 M8 12h8 M8 15.5h5"/></g></symbol>
+    <symbol id="i-heat" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13.5V5a2 2 0 0 1 4 0v8.5a4 4 0 1 1-4 0z"/><path d="M12 9v6"/></g></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h9 M17 7h3 M4 17h3 M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></g></symbol>
+    <symbol id="i-helmet" viewBox="0 0 24 24"><path d="M4.5 15.5a7.5 7.5 0 0 1 15 0z" fill="currentColor"/><path d="M12 5.5v4.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><rect x="2.5" y="15.5" width="19" height="3" rx="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></g></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </svg>
+
   <header class="topbar">
     <div class="brand">
       <h1>WorkWear</h1>
-      <span class="subtitle">Site safety dashboard</span>
+      <span class="subtitle">Site safety</span>
     </div>
-    <!-- One view at a time. In the header on wide screens, fixed at the bottom on phones (CSS). -->
-    <nav class="tabbar" aria-label="Views">
-      <button type="button" class="tabbar__btn" data-view="map" aria-pressed="true">Map</button>
-      <button type="button" class="tabbar__btn" data-view="workers" aria-pressed="false">Workers <span class="tabbar__count" id="tab-workers" title="Online / all helmets"></span></button>
-      <button type="button" class="tabbar__btn" data-view="incidents" aria-pressed="false">Incidents <span class="tabbar__count" id="tab-incidents" title="New, not reviewed yet"></span></button>
-    </nav>
+    <span id="sample-badge" class="pill pill--sample" hidden
+          title="Simulated helmets and sample incident history are on. They are not real readings or real incidents.">Sample data</span>
     <div class="topbar__right">
       <button id="sound" class="btn btn--quiet" type="button" aria-pressed="false"
-              title="Play a sound when a new fall comes in">Alert sound: off</button>
+              title="Play a sound when a new fall comes in">Sound off</button>
       <div id="conn" class="conn conn--wait" role="status" aria-live="polite">Connecting…</div>
     </div>
   </header>
 
-  <!-- Fall alert line: always there at a fixed height, so a fall never moves or covers the page.
-       Quiet when there is nothing; red and pulsing when a fall comes in. -->
+  <!-- Fall alert: one slim line, always there at a fixed height, so it never moves or covers the page. -->
   <div id="alert" class="alert" data-state="idle">
     <span class="alert__icon" aria-hidden="true"></span>
-    <div class="alert__body" role="alert">
-      <div class="alert__title" id="alert-title">No fall alerts</div>
-      <div class="alert__detail"><span id="alert-detail"></span><span class="alert__badges" id="alert-badges"></span><span class="alert__more" id="alert-more"></span></div>
+    <div class="alert__text" role="alert">
+      <span class="alert__label" id="alert-label">No fall alerts</span>
+      <a class="alert__summary" id="alert-summary" href="#/incidents" hidden></a>
+      <span class="alert__more" id="alert-more"></span>
     </div>
-    <div class="alert__actions">
-      <button id="alert-show" class="btn" type="button" hidden>Show in list</button>
-      <button id="alert-hide" class="btn" type="button" hidden>Hide alert</button>
-    </div>
+    <a class="alert__link" id="alert-show" href="#/incidents" hidden>Show in list</a>
+    <button class="alert__hide" id="alert-hide" type="button" title="Hide alert" aria-label="Hide alert" hidden>
+      <svg aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
   </div>
 
-  <main class="layout">
-    <section class="panel panel--workers" aria-labelledby="h-workers">
-      <h2 id="h-workers">Workers</h2>
-      <div id="workers" class="empty">Waiting for helmets…</div>
-    </section>
+  <div class="app">
+    <nav class="rail" aria-label="Sections">
+      <a class="rail__item" href="#/map" data-section="map"><svg aria-hidden="true"><use href="#i-map"/></svg><span>Map</span></a>
+      <a class="rail__item" href="#/workers" data-section="workers"><svg aria-hidden="true"><use href="#i-workers"/></svg><span>Workers</span><span class="rail__count" id="count-workers" title="Online / all helmets"></span></a>
+      <a class="rail__item" href="#/incidents" data-section="incidents"><svg aria-hidden="true"><use href="#i-incidents"/></svg><span>Incidents</span><span class="rail__count" id="count-incidents" title="Pending: not reviewed yet"></span></a>
+      <a class="rail__item" href="#/heat" data-section="heat"><svg aria-hidden="true"><use href="#i-heat"/></svg><span>Heat</span></a>
+      <a class="rail__item" href="#/settings" data-section="settings"><svg aria-hidden="true"><use href="#i-settings"/></svg><span>Settings</span></a>
+    </nav>
 
-    <section class="panel panel--map" aria-labelledby="h-map">
-      <h2 id="h-map">Site map <span id="map-loc-tag" class="tag tag--sim">Simulated location</span></h2>
-      <p class="panel__note"><span id="site-name"></span> <span id="map-loc-note">Zones are set by the supervisor on each worker card, not measured.</span></p>
-      <div class="map__controls">
-        <div id="map-layers" class="seg" role="group" aria-label="Map layer">
-          <button type="button" class="seg__btn" data-layer="incidents" aria-pressed="true">Incidents</button>
-          <button type="button" class="seg__btn" data-layer="heat" aria-pressed="false">Heat</button>
-        </div>
-        <label class="map__hours">Time
-          <select id="map-hours">
-            <option value="">All time</option>
-            <option value="24">Last 24 h</option>
-            <option value="8">Last 8 h</option>
-            <option value="1">Last hour</option>
-          </select>
-        </label>
-      </div>
-      <div class="mapwrap">
-      <div class="mapwrap__main">
-        <div id="map-problems" class="map__problems" role="status" hidden></div>
-        <div class="mapbox" id="mapbox"><div id="map" class="map" aria-label="Site zones"></div></div>
-        <div class="map__off">
-          <h3 class="map__offtitle">Not on the map</h3>
-          <ul id="map-off" class="dots" aria-label="Workers with no zone on the map"></ul>
-        </div>
-      </div>
-      <details class="mapkey" id="map-key">
-      <summary>Map key</summary>
-      <div class="mapkey__body">
-        <div id="legend-incidents">
-          <h3 class="mapkey__title">Zones</h3>
-          <ul class="legend" aria-label="Zone colors">
-            <li class="legend__wide"><span class="legend__zone legend__zone--shade-1"></span><span class="legend__zone legend__zone--shade-2"></span><span class="legend__zone legend__zone--shade-3"></span>Confirmed incidents: 1, 2, 3+</li>
-            <li class="legend__wide"><span class="legend__zone legend__zone--fall"></span>New fall, not reviewed yet</li>
-          </ul>
-          <h3 class="mapkey__title">Falls</h3>
-          <ul class="legend" aria-label="Fall dots">
-            <li><span class="legend__marker marker--new marker--exact"></span>Not reviewed</li>
-            <li><span class="legend__marker marker--confirmed marker--exact"></span>Confirmed</li>
-            <li class="legend__wide"><span class="legend__marker marker--new marker--approx"></span>Approximate (somewhere in its zone)</li>
-          </ul>
-        </div>
-        <h3 class="mapkey__title">Heat risk <span class="mapkey__sub">(air, not body temperature)</span></h3>
-        <ul class="legend" aria-label="Heat risk colors">
-          <li><span class="dot__swatch heat--normal"></span>Normal</li>
-          <li><span class="dot__swatch heat--caution"></span>Caution</li>
-          <li><span class="dot__swatch heat--extreme-caution"></span>Extreme caution</li>
-          <li><span class="dot__swatch heat--danger"></span>Danger</li>
-          <li><span class="dot__swatch heat--extreme-danger"></span>Extreme danger</li>
-          <li><span class="dot__swatch heat--none"></span>No reading</li>
-        </ul>
-        <h3 class="mapkey__title">Workers</h3>
-        <ul class="legend" aria-label="Worker dots">
-          <li><span class="dot__swatch dot__swatch--fall"></span>New fall</li>
-          <li><span class="legend__located"></span>Located by beacons or GPS</li>
-        </ul>
-      </div>
-      </details>
-      </div>
-    </section>
+    <aside class="people" aria-label="Workers">
+      <label class="search">
+        <svg aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="people-q" type="search" placeholder="Search workers" autocomplete="off" aria-label="Search workers by name or device ID">
+      </label>
+      <ul id="people" class="people__list" aria-label="Workers"></ul>
+      <p id="people-empty" class="muted people__empty" hidden></p>
+    </aside>
 
-    <section class="panel panel--incidents" aria-labelledby="h-incidents">
-      <h2 id="h-incidents">Incidents</h2>
-      <p class="panel__note">Newest first. Falls come from helmets; injury and hazard reports are entered by hand.
-        Confirm or dismiss each one: only confirmed incidents count on the hazard map.</p>
-      <button id="report-open" class="btn" type="button" aria-expanded="false" aria-controls="report">Report injury or hazard</button>
-      <div id="report-msg" class="report__msg" role="status"></div>
-      <form id="report" class="report" hidden novalidate>
-        <fieldset class="report__type">
-          <legend>Type</legend>
-          <label><input type="radio" name="type" value="injury_report" checked> Injury</label>
-          <label><input type="radio" name="type" value="hazard_report"> Hazard (for example a wet floor)</label>
-        </fieldset>
-        <label>Zone <select name="zone"></select></label>
-        <label>Worker (optional) <select name="device"></select></label>
-        <label id="report-name-row">Name, if not on a helmet (optional) <input name="name" maxlength="80" autocomplete="off"></label>
-        <label>Notes <textarea name="notes" rows="3" maxlength="2000"></textarea></label>
-        <div class="report__buttons">
-          <button type="submit" class="btn btn--primary">Save report</button>
-          <button type="button" id="report-cancel" class="btn">Cancel</button>
+    <main class="main" id="main">
+      <!-- Map -->
+      <section class="view view--map" data-view="map" aria-labelledby="h-map">
+        <div class="view__head">
+          <h2 id="h-map">Site map</h2>
+          <span id="map-loc-tag" class="pill pill--sim">Simulated location</span>
+          <label class="field">Time
+            <select id="map-hours" data-hours>
+              <option value="">All time</option>
+              <option value="24">Last 24 h</option>
+              <option value="8">Last 8 h</option>
+              <option value="1">Last hour</option>
+            </select>
+          </label>
         </div>
-      </form>
-      <div id="incidents-empty" class="empty">No incidents yet.</div>
-      <ol id="incidents" class="incidents" aria-label="Incidents, newest first" hidden></ol>
-    </section>
+        <p class="note"><span id="site-name"></span> <span id="map-loc-note"></span></p>
+        <div id="map-problems" class="problems" role="status" hidden></div>
+        <div class="mapwrap">
+          <div class="mapwrap__main">
+            <div id="map-main" class="planhost"></div>
+            <div class="map__off" hidden>
+              <h3 class="subhead">Not on the map</h3>
+              <ul id="map-off" class="dots" aria-label="Workers with no zone on the map"></ul>
+            </div>
+          </div>
+          <aside id="zonepanel" class="zonepanel" hidden aria-labelledby="zp-title">
+            <div class="zonepanel__head">
+              <h3 id="zp-title"></h3>
+              <button id="zp-close" class="iconbtn" type="button" aria-label="Close zone list"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
+            </div>
+            <p id="zp-sub" class="muted"></p>
+            <ul id="zp-list" class="minilist"></ul>
+          </aside>
+        </div>
+      </section>
 
-    <footer class="footer">
-      Heat risk is based on ambient temperature and humidity at the helmet, not body temperature.
-      Location is the zone set by the supervisor (simulated) unless a helmet locates itself with beacons or GPS,
-      which the map marks. Data from simulated helmets is labeled as sample data.
-    </footer>
-  </main>
+      <!-- Workers -->
+      <section class="view" data-view="workers" aria-labelledby="h-workers">
+        <div class="view__head">
+          <h2 id="h-workers">Workers</h2>
+          <label class="search search--inline">
+            <svg aria-hidden="true"><use href="#i-search"/></svg>
+            <input id="workers-q" type="search" placeholder="Search workers" autocomplete="off" aria-label="Search workers by name or device ID">
+          </label>
+        </div>
+        <p class="note">Click a worker for their profile. Zones set on the dashboard are simulated locations.</p>
+        <table class="table table--workers">
+          <thead><tr><th>Worker</th><th>Status</th><th>Zone</th><th class="num">Heat index</th><th>Last seen</th></tr></thead>
+          <tbody id="workers-rows"></tbody>
+        </table>
+        <p id="workers-empty" class="muted" hidden></p>
+      </section>
+
+      <!-- Incidents -->
+      <section class="view" data-view="incidents" aria-labelledby="h-incidents">
+        <div class="view__head">
+          <h2 id="h-incidents">Incidents</h2>
+          <label class="field">Status
+            <select id="inc-status"></select>
+          </label>
+          <button id="report-open" class="btn" type="button" aria-expanded="false" aria-controls="report">Report injury or hazard</button>
+        </div>
+        <p class="note">Newest first. Falls come from helmets; injury and hazard reports are entered by hand.
+          Only confirmed incidents count on the map.</p>
+        <div id="report-msg" class="formmsg" role="status"></div>
+        <form id="report" class="card report" hidden novalidate>
+          <fieldset class="report__type">
+            <legend>Type</legend>
+            <label><input type="radio" name="type" value="injury_report" checked> Injury</label>
+            <label><input type="radio" name="type" value="hazard_report"> Hazard (for example a wet floor)</label>
+          </fieldset>
+          <label>Zone <select name="zone"></select></label>
+          <label>Worker (optional) <select name="device"></select></label>
+          <label id="report-name-row">Name, if not on a helmet (optional) <input name="name" maxlength="80" autocomplete="off"></label>
+          <label>Notes <textarea name="notes" rows="3" maxlength="2000"></textarea></label>
+          <div class="report__buttons">
+            <button type="submit" class="btn btn--primary">Save report</button>
+            <button type="button" id="report-cancel" class="btn">Cancel</button>
+          </div>
+        </form>
+        <table class="table table--incidents">
+          <thead><tr><th>Date and time</th><th>Worker</th><th>Zone</th><th>Type</th><th class="num">Peak g</th><th>Status</th><th><span class="sr-only">Open</span></th></tr></thead>
+          <tbody id="inc-rows"></tbody>
+        </table>
+        <p id="inc-empty" class="muted" hidden></p>
+      </section>
+
+      <!-- Heat -->
+      <section class="view view--heat" data-view="heat" aria-labelledby="h-heat">
+        <div class="view__head">
+          <h2 id="h-heat">Heat</h2>
+          <label class="field">Time
+            <select id="heat-hours" data-hours>
+              <option value="">All time</option>
+              <option value="24">Last 24 h</option>
+              <option value="8">Last 8 h</option>
+              <option value="1">Last hour</option>
+            </select>
+          </label>
+        </div>
+        <p class="note">Air temperature and humidity measured at each helmet, combined into a heat index.
+          This is heat risk from the air, not body temperature. Zones show the highest heat index measured there.</p>
+        <div class="heatgrid">
+          <div id="map-heat" class="planhost"></div>
+          <div>
+            <table class="table table--heat">
+              <thead><tr><th>Worker</th><th>Zone</th><th class="num">Air</th><th class="num">Humidity</th><th class="num">Heat index</th><th>Heat risk</th></tr></thead>
+              <tbody id="heat-rows"></tbody>
+            </table>
+            <p id="heat-empty" class="muted" hidden>No helmets yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section class="view" data-view="settings" aria-labelledby="h-settings">
+        <div class="view__head"><h2 id="h-settings">Settings</h2></div>
+        <div class="cards">
+          <div class="card">
+            <h3 class="subhead">Alerts</h3>
+            <p class="note">Browsers block sound until you click something, so it starts off each time the page opens.</p>
+            <button id="sound-2" class="btn" type="button" aria-pressed="false">Turn alert sound on</button>
+          </div>
+          <div class="card">
+            <h3 class="subhead">Connection</h3>
+            <p id="set-conn"></p>
+            <p class="note">The page asks the server for new data every second.</p>
+          </div>
+          <div class="card">
+            <h3 class="subhead">Site map</h3>
+            <dl class="facts" id="set-site"></dl>
+            <p class="note">Edit <code>dashboard/zones.json</code> to change zones. To put GPS positions on the plan,
+              open <a href="?calibrate#/map">the map in calibrate mode</a> (see <code>dashboard/README.md</code>).</p>
+          </div>
+          <div class="card">
+            <h3 class="subhead">Sample data</h3>
+            <p id="set-sample"></p>
+            <p class="note">Simulated helmets have IDs starting with <code>sim-</code>. Replace the sample history with
+              <code>python3 seed.py --reset</code> in <code>server/</code> (it backs up the database first).</p>
+          </div>
+          <div class="card card--wide">
+            <h3 class="subhead">What the labels mean</h3>
+            <ul class="plainlist">
+              <li><strong>Heat risk</strong> comes from air temperature and humidity at the helmet (the heat index), not body temperature.</li>
+              <li><strong>Simulated location</strong>: the zone was set on the dashboard. <strong>Located by BLE beacons or GPS</strong>: the helmet measured it.</li>
+              <li><strong>Sample data</strong>: simulated helmets and seeded history, not real readings or real incidents.</li>
+              <li><strong>Pending</strong>: not reviewed yet. Only <strong>confirmed</strong> incidents count on the map.</li>
+              <li><strong>Arrived late</strong>: the helmet held the fall while its Wi-Fi was down; the time is when the server got it.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Incident page -->
+      <section class="view" data-view="incident" aria-labelledby="ip-title">
+        <a class="back" href="#/incidents"><svg aria-hidden="true"><use href="#i-back"/></svg>Incidents</a>
+        <div class="view__head">
+          <h2 id="ip-title">Incident</h2>
+          <span id="ip-pills" class="pills"></span>
+        </div>
+        <p id="ip-missing" class="muted" hidden></p>
+        <div class="pagegrid" id="ip-body">
+          <div class="card">
+            <div id="map-incident" class="planhost planhost--mini"></div>
+            <p id="ip-mapnote" class="note"></p>
+            <h3 class="subhead">Workers in this zone now</h3>
+            <ul id="ip-nearby" class="minilist"></ul>
+          </div>
+          <div class="card">
+            <dl class="facts" id="ip-facts"></dl>
+            <div class="actions" id="ip-actions"></div>
+            <div class="noteedit" id="ip-noteedit" hidden>
+              <textarea id="ip-notes" rows="3" maxlength="2000" aria-label="Notes"></textarea>
+              <div class="actions">
+                <button id="ip-note-save" class="btn btn--primary" type="button">Save note</button>
+                <button id="ip-note-cancel" class="btn" type="button">Cancel</button>
+              </div>
+            </div>
+            <div id="ip-msg" class="formmsg" role="status"></div>
+            <h3 class="subhead">Timeline</h3>
+            <ol id="ip-timeline" class="timeline"></ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- Worker profile -->
+      <section class="view" data-view="worker" aria-labelledby="wp-title">
+        <a class="back" href="#/workers"><svg aria-hidden="true"><use href="#i-back"/></svg>Workers</a>
+        <p id="wp-missing" class="muted" hidden></p>
+        <div id="wp-body">
+          <div class="profile">
+            <svg class="avatar avatar--lg" id="wp-avatar" aria-hidden="true"><use href="#i-helmet"/></svg>
+            <div class="profile__main">
+              <h2 id="wp-title" class="sr-only">Worker</h2>
+              <input id="wp-name" class="namefield" type="text" maxlength="80" aria-label="Worker name"
+                     title="Click to rename. Enter to save, Esc to cancel.">
+              <div class="pills" id="wp-pills"></div>
+            </div>
+          </div>
+          <div id="wp-msg" class="formmsg" role="status"></div>
+          <div class="cards">
+            <div class="card">
+              <h3 class="subhead">Location</h3>
+              <dl class="facts" id="wp-loc"></dl>
+              <label class="field field--stack">Zone set on the dashboard
+                <select id="wp-zone"></select>
+              </label>
+            </div>
+            <div class="card">
+              <h3 class="subhead">Heat (air at the helmet)</h3>
+              <dl class="facts" id="wp-heat"></dl>
+              <p class="note">Heat index from air temperature and humidity at the helmet. Not body temperature.</p>
+            </div>
+            <div class="card">
+              <h3 class="subhead">Helmet</h3>
+              <dl class="facts" id="wp-helmet"></dl>
+            </div>
+          </div>
+          <h3 class="subhead">Recent incidents</h3>
+          <table class="table table--incidents">
+            <thead><tr><th>Date and time</th><th>Worker</th><th>Zone</th><th>Type</th><th class="num">Peak g</th><th>Status</th><th><span class="sr-only">Open</span></th></tr></thead>
+            <tbody id="wp-incidents"></tbody>
+          </table>
+          <p id="wp-inc-empty" class="muted" hidden>No incidents for this helmet.</p>
+        </div>
+      </section>
+    </main>
+  </div>
 </body>
 </html>

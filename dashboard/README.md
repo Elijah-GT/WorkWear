@@ -13,31 +13,34 @@ The supervisor's view: who is wearing a helmet, their heat risk, which zone they
 
 The header says **Connected** when the server answers. On a phone or tablet on the same network, open `http://<laptop IP>:8000/` (find the IP and fix network problems with [`server/README.md` section 5](../server/README.md#5-let-the-esp32-reach-the-server)).
 
-To try it without helmets, run the simulator in a second terminal:
+To try it without helmets, run the simulator in a second terminal, and add a few days of sample history once:
 
 ```bash
 cd server
-python3 simulator.py --devices 3 --fall-every 30 --heat-ramp 5
+python3 seed.py                       # 8 sample incidents over the last few days (once)
+python3 simulator.py --devices 3      # 3 simulated helmets
 ```
 
-Three simulated helmets appear within a second. Every 30 s one of them "falls", and the alert line under the header turns red.
+For a live fall during a demo, run the simulator with `--fall-every 600` (or any number of seconds): the alert line under the header turns red when it arrives. Avoid short intervals like 30 s for demos; they fill the list with dozens of falls. `python3 seed.py --reset` puts the 8-incident history back (it backs up the database first and deletes only sample data).
 
 ## 2. What is on the page
 
+The **icon rail** on the left switches sections: **Map**, **Workers** (online / all helmets), **Incidents** (pending count, red), **Heat**, and **Settings**. On wide screens a **searchable worker list** sits beside it: one row per helmet with a hard-hat icon colored by status (red = new fall, grey = offline, otherwise the heat-risk color), the name, and the device ID; click a row for that worker's profile. The address bar follows the page (`#/map`, `#/incident/12`, `#/worker/sim-01`), so the browser's Back button works and a page can be bookmarked.
+
 | Part | What it does |
 |---|---|
-| **Tabs** | One view at a time: **Map**, **Workers** (shows online / all helmets), and **Incidents** (shows how many are new, in red). The page opens on the map, which is sized to fit the window so nothing scrolls. The tabs are in the header; on a phone (700 px wide or less) they are a bar at the bottom. "Show in list" and clicking a fall dot switch to Incidents. |
-| **Alert line** | The line under the header is always there and never changes size, so an alert never moves or covers anything. It reads "No fall alerts" until a fall arrives while the page is open; then it turns **red and pulses**, with who, where, when, and the peak g, and **Show in list** / **Hide alert**. It stays until you click **Hide alert**. Falls that were already in the list when the page opened do not raise it. The browser tab title also shows the count, e.g. "(1) FALL". Only the area below the alert line scrolls. |
-| **Alert sound** | Off when the page opens: browsers block sound until you click something. Click **Alert sound: off** to turn it on (it plays a test beep). |
-| **Workers** | One card per helmet: name, online/offline (offline = nothing for 5 s), heat risk color and reading, helmet on/off, last seen. **Click the name to rename** (Enter saves, Esc cancels). **Pick a zone** from the list to say where the worker is. Both are saved on the server, and new incidents use the name and zone at that moment. |
-| **Site map** | The floor plan of room 1520 (from `zones.json`) with its zones drawn on it. A dot per worker in their zone, colored by heat risk; click or tap one to open that worker's card. When a zone is too small for its name tags (common on a phone), its workers show as **initials** in their heat color ("sim-01" = S1, "Alex Smith" = AS); if even that doesn't fit, one "3 workers" tag. Tags never spill into the next zone. Workers without a zone are listed under "Not on the map". |
-| **Fall dots** | Every fall that isn't dismissed is a red dot on the plan (Incidents layer; the **Time** filter applies). Bright = not reviewed, dark = confirmed; a new fall's dot pulses. With a GPS position (and `gps_points` set up, section 4) the dot is at that spot. Otherwise it sits at a fixed spot inside the zone the fall was recorded in, with a **dashed ring meaning "approximate"**. Hover for who, when, and how sure; click to jump to it in the list. Worker names and zone labels are always drawn on top of fall dots. |
-| **Located workers** | Workers whose helmet located itself (BLE beacons or GPS) have a **blue ring**, and their card says "Located in ... by beacons". The map tag then reads "Location: measured where marked" instead of "Simulated location". Otherwise the zone picked on the card is used. |
-| **New fall on the map** | The zone gets a thick **pulsing red outline** and a **NEW FALL** tag, and the worker's dot pulses. This is never a fill, so a live fall can't be mistaken for a past hazard. It lasts until the alert is hidden or the fall is confirmed or dismissed. |
-| **Map key** | The colors and what they mean, in short groups (Zones, Falls, Heat risk, Workers). Beside the map on wide screens; on smaller ones, tap **Map key** under the map and it opens over the bottom of the map, so there is nothing to scroll. |
-| **Map layers** | **Incidents** fills each zone **red** by its number of **confirmed** incidents (light, medium, dark = 1, 2, 3 or more) with a count tag. Confirming a fall turns its zone's outline into a red fill. **Heat** tints each zone in the heat-risk color of the highest heat index measured there. **Time** limits both to the last 24 h, 8 h, or hour. Hover a zone for the full text. |
-| **Incidents** | Newest first, with badges: New / Confirmed / Dismissed, Sample data, Arrived late. **Confirm** a real incident, **Dismiss** a false alarm, or **Mark new** to undo. Add or edit a note on any incident. Confirming or dismissing a fall also clears its alert. |
-| **Report injury or hazard** | For things the helmet cannot detect, such as a cut hand or a wet floor. Pick the type and zone, and optionally the helmet (its name is copied) or a typed name. Reports start as New; confirm them for them to count on the map. |
+| **Header** | App name, a **Sample data** badge while simulated helmets or sample incidents are on, **Sound on/off**, and the connection status. |
+| **Alert line** | One slim line under the header, always there at the same height, so an alert never moves or covers anything. It reads "No fall alerts" until a fall arrives while the page is open; then it turns **red and pulses**: worker, zone, time, peak g, and how many other new falls there are. Click the text to open the fall, **Show in list** to find it in the Incidents table, or **×** to hide the alert. Falls already in the list when the page opened do not raise it. The browser tab title also shows the count, e.g. "(1) FALL". |
+| **Alert sound** | Off when the page opens: browsers block sound until you click something. Click **Sound off** in the header (or the button in Settings) to turn it on; it plays a test beep. |
+| **Map** | The floor plan of room 1520 (`zones.json`). Each zone is **shaded by its number of confirmed incidents** (light, medium, dark = 1, 2, 3 or more) with the count on it; past incidents are not drawn one by one. A live fall is **one red marker with a pulsing ring** (at its GPS spot, or a dashed "approximate" spot in its zone) and a red outline on its zone. **Click a zone** to list its incidents beside the map (or over it on smaller screens). Worker dots show who is where, colored by heat risk; click one for the profile. A zone too small for name tags shows initials, then one "3 workers" tag. **Key** (top right of the map) opens a small key. **Time** limits the counts to the last 24 h, 8 h, or hour. |
+| **Workers** | A table of helmets: name and device ID, online/offline, zone and how it was found, heat index, last seen. The search box filters it (and the worker list). |
+| **Worker profile** | Name (click to rename; Enter saves, Esc cancels), device ID, online/offline, helmet on/off, the zone now and **how it was found** (BLE beacons, GPS, or set on the dashboard = simulated), the zone set on the dashboard (change it here), latest **air temperature, humidity and heat index**, last seen, and their recent incidents. |
+| **Incidents** | A table, newest first: date and time, worker, zone, type (fall, injury report, hazard report), peak g, a status pill (**Pending**, **Confirmed**, **Dismissed**), and **View**. Filter by status. **Report injury or hazard** opens the form for things the helmet cannot detect (a cut hand, a wet floor); reports start as Pending. |
+| **Incident page** | Opens from View, a zone list, or the alert line. A small floor plan with the zone highlighted and the spot marked, the workers in that zone now, the details, **Confirm**, **Dismiss** (or **Mark new** to undo), **Add note**, and a short **timeline**: received by the server (and "arrived late" when it did), whether this screen showed the alert, and the review status. Review times are not stored by the server, so the timeline shows "Confirmed" without a time. |
+| **Heat** | The floor plan tinted by the highest heat index measured in each zone, and a table of workers from hottest to coolest: air temperature, humidity, heat index, heat risk. |
+| **Settings** | Alert sound, connection, site map details (zones, GPS calibration status), sample data status, and what the labels mean. |
+
+On a **phone** (700 px or narrower) the rail is a bar at the bottom, the worker list is the Workers section, and tables become stacked rows. Between 700 and 1100 px the worker list column is hidden (search is in the Workers section).
 
 ![Dashboard on a phone](../docs/img/dashboard-phone.png)
 
@@ -47,10 +50,10 @@ These labels keep the demo honest (see "Honesty rules" in [`CLAUDE.md`](../CLAUD
 
 | Label | Meaning |
 |---|---|
-| **Simulated helmet** | The device ID starts with `sim-`: it is the simulator, not hardware. |
-| **Sample data** | An incident from a simulated helmet. Zone tags on the map say "sample" (or "incl. sample") when their count contains any. |
-| **Simulated location** | Zones are set by hand on the worker cards; nothing measures where the worker is. |
+| **Sample data** (header badge) | Simulated helmets (device IDs starting with `sim-`) or seeded sample incidents are on. When **everything** shown is sample data, this one badge labels it. When real helmets or real incidents are also present, each sample row also gets its own **Sample** pill, so the two can be told apart. An incident page always says when it is sample data. |
+| **Simulated location** | The zone was set on the dashboard; nothing measured where the worker is. **Located by BLE beacons / GPS** means the helmet measured it, and the worker's dot gets a blue ring. |
 | **Heat risk** | Based on air temperature and humidity at the helmet (the heat index), **not** body temperature. Colors follow the bands in [`docs/PROTOCOL.md`](../docs/PROTOCOL.md) section 7. |
+| **Pending** | Not reviewed yet (the server calls it `new`). Only **confirmed** incidents count on the map. |
 | **Arrived late** | The helmet held the fall while its Wi-Fi was down and sent it more than 5 s later. The time shown is when the server got it. |
 
 ## 4. Change the site map
@@ -117,19 +120,23 @@ The tests cover the parts that make decisions (heat labels, which falls raise th
 |---|---|
 | **"Can't reach server"** in red | The server stopped or the network dropped. The page keeps the last data and reconnects by itself. Start the server again (`server/README.md` section 3). |
 | The page is blank or unstyled | Open it through the server (`http://localhost:8000/`), not by double-clicking `index.html`. |
-| No sound on a fall | Click **Alert sound: off** to turn it on. You need to do this each time the page is opened. |
+| No sound on a fall | Click **Sound off** to turn it on. You need to do this each time the page is opened. |
+| "Can't reach server" flickers now and then | The map's per-zone summary (`/api/hazards`) reads every telemetry row; after hours of simulator data on a slow disk (WSL on `/mnt/c`) it can take over 2 s. Pick a shorter **Time** window, or restart with a fresh database. |
 | A rename or zone change shows a red message | The server refused or did not answer; the message says why. The old value is kept. |
 | The map says zones.json could not be loaded | The file has a JSON error (a missing comma is common). Check it with `python3 -m json.tool dashboard/zones.json`. |
-| A worker is not on the map | They have no zone, or a zone not in `zones.json`. Pick one on their card. |
-| An old fall doesn't raise the alert | That is on purpose: only falls that arrive while the page is open do. Check the list for anything still marked New (the red count on the Incidents tab). |
+| A worker is not on the map | They have no zone, or a zone not in `zones.json`. Pick one on their profile. |
+| An old fall doesn't raise the alert | That is on purpose: only falls that arrive while the page is open do. Check the Incidents table for anything still Pending (the red count on the rail). |
+| Every row says "Sample" | Real and sample data are mixed (for example one report entered by hand while the simulator runs), so each sample row is labeled. With only sample data, the header badge alone labels it. |
 
 ## Layout
 
 ```
 dashboard/
-  index.html          page structure
-  style.css           look and layout (tabs; tab bar at the bottom under 700 px)
-  app.js              loads data every second and draws the page
+  index.html          page structure: header, alert line, rail, worker list, one section per view
+  style.css           look and layout; one type scale; rail at the bottom under 700 px
+  app.js              loads data every second, follows the address (#/...), draws the current view
+  map.js              the floor-plan map (Map, Heat, and the small one on incident pages)
+  ui.js               small page helpers (pills, avatars, lists)
   logic.js            decisions without the page (tested)
   api.js              talks to the server (2 s timeout)
   zones.json          the site map: floor plan and zones

@@ -8,7 +8,7 @@
 #include <BLEAdvertising.h>
 #include <BLEDevice.h>
 
-#define BEACON_ZONE "1520-N"  // change for each beacon: 1520-W, 1520-N, 1520-S, 1520-A, 1522, 1533
+#define BEACON_ZONE "1520-S"  // change for each beacon: 1520-W, 1520-N, 1520-S, 1520-A, 1522, 1533
 #define NAME_PREFIX "WW-"     // must match BEACON_NAME_PREFIX in firmware/config.h
 #define BEACON_NAME NAME_PREFIX BEACON_ZONE
 

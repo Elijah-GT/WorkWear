@@ -110,7 +110,7 @@
 // on the dashboard. 0 = no scanning; the helmet sends "zone": null as before.
 // With 1, pick Tools > Partition Scheme > "Huge APP" (BLE makes the program too big for the
 // default scheme). See firmware/README.md.
-#define HAS_BLE_BEACONS      0
+#define HAS_BLE_BEACONS      1
 #define BEACON_NAME_PREFIX   "WW-"   // beacons advertise "WW-<zone id>", e.g. "WW-1520-N"
 #define BEACON_SCAN_S        1       // each scan listens this many seconds
 #define BEACON_MIN_RSSI      -90     // dBm; weaker beacons are ignored

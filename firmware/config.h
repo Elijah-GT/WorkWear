@@ -11,7 +11,7 @@
 #define DEVICE_ID "helmet-01"
 // The laptop running the server, as the ESP32 sees it on the hotspot. Find it with
 // `ipconfig` on the laptop. Port 8000 (docs/PROTOCOL.md section 1).
-#define SERVER_URL "http://192.168.43.10:8000"
+#define SERVER_URL "http://172.20.10.3:8000"  // laptop on the iPhone hotspot (2026-11-07); iPhone hotspots use 172.20.10.x
 
 #define HTTP_TIMEOUT_MS      3000   // no answer within 3 s = failure (PROTOCOL.md section 1)
 #define TELEMETRY_PERIOD_MS  1000   // about 1 Hz

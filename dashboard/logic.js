@@ -29,6 +29,24 @@ export function formatAgo(ms) {
   return `${Math.floor(h / 24)} d ago`;
 }
 
+// Air temperature for display, in °F (Elijah, 2026-11-07). The protocol and server keep °C.
+export function formatAirTemp(c) {
+  return c == null ? null : `${((c * 9) / 5 + 32).toFixed(1)} °F`;
+}
+
+// The helmet's latest drop check (PROTOCOL.md 2.1), for bench testing on battery:
+// "Free fall 43 ms (needs 100) · lowest 0.20 g · hit 1.41 g (needs 2.5) · 12 s ago".
+// latestUptimeMs (the helmet's newest uptime) gives the age; both come from the helmet's clock.
+export function dropCheckText(check, latestUptimeMs) {
+  if (!check) return null;
+  const need = (v, unit = "") => (v == null ? "" : ` (needs ${v}${unit})`);
+  const parts = [`Free fall ${check.freefall_ms} ms${need(check.freefall_need_ms)}`];
+  if (check.min_g != null) parts.push(`lowest ${check.min_g.toFixed(2)} g`);
+  if (check.peak_g != null) parts.push(`hit ${check.peak_g.toFixed(2)} g${need(check.impact_need_g)}`);
+  if (latestUptimeMs != null && latestUptimeMs >= check.uptime_ms) parts.push(formatAgo(latestUptimeMs - check.uptime_ms));
+  return parts.join(" · ");
+}
+
 // --- Workers (D2) -----------------------------------------------------------
 
 // Heat risk levels, PROTOCOL.md section 7. Wording is "heat risk", never heat stress.

@@ -164,8 +164,11 @@ bool envBegin() {
   return false;
 #endif
 #if BME280_POWER_PIN >= 0
-  // The BME280 is powered from a GPIO (config.h): switch it on and let it boot (datasheet: 2 ms).
+  // The BME280 is powered from a GPIO (config.h): power-cycle it (a real reset, also on a
+  // retry after bad readings), then let it boot (datasheet: 2 ms).
   pinMode(BME280_POWER_PIN, OUTPUT);
+  digitalWrite(BME280_POWER_PIN, LOW);
+  delay(20);
   digitalWrite(BME280_POWER_PIN, HIGH);
   delay(10);
 #endif
@@ -194,6 +197,18 @@ void envRead(EnvReading* r) {
   r->humidity_pct = (h >= 0.0f && h <= 100.0f) ? h : NAN;
   const float p = bme.readPressure();  // pascals, NAN on failure
   r->pressure_hpa = isnan(p) ? NAN : p / 100.0f;
+
+  // Bench, 2026-11-07: after a test drop shook a wire, it read 182 C and -147 hPa, and that
+  // went to the dashboard. Outside the sensor's range = a bad bus or a reset sensor: send
+  // nothing and switch it off, so loop() power-cycles and restarts it.
+  const bool temp_ok = r->temp_c >= BME280_MIN_C && r->temp_c <= BME280_MAX_C;
+  const bool pressure_ok = r->pressure_hpa >= BME280_MIN_HPA && r->pressure_hpa <= BME280_MAX_HPA;
+  if (!temp_ok || !pressure_ok) {
+    Serial.printf("# BME280: impossible reading (%.1f C, %.1f hPa), restarting it\n", r->temp_c,
+                  r->pressure_hpa);
+    r->temp_c = r->humidity_pct = r->pressure_hpa = NAN;
+    env_ok = false;
+  }
 }
 
 // ---------------- GPS ----------------

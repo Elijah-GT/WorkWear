@@ -60,7 +60,7 @@ def latest_view(t: sqlite3.Row | None) -> dict | None:
     }
 
 
-def device_view(conn: sqlite3.Connection, d: sqlite3.Row) -> dict:
+def device_view(conn: sqlite3.Connection, d: sqlite3.Row, drop_checks: dict | None = None) -> dict:
     last_seen = d["last_seen"]
     online = last_seen is not None and db.now() - db.parse_ts(last_seen) <= ONLINE_WINDOW
     return {
@@ -70,6 +70,8 @@ def device_view(conn: sqlite3.Connection, d: sqlite3.Row) -> dict:
         "online": online,
         "last_seen": last_seen,
         "latest": latest_view(db.latest_telemetry(conn, d["device_id"])),
+        # The helmet's latest drop check, or null (diagnostics, memory only; PROTOCOL.md 2.1).
+        "drop_check": (drop_checks or {}).get(d["device_id"]),
     }
 
 
@@ -125,6 +127,8 @@ def create_app(db_path: Path | None = None, site_path: Path | None = None) -> Fa
 
     app = FastAPI(title="WorkWear server", lifespan=lifespan)
     app.state.db_path = path
+    # Latest drop check per helmet (diagnostics only, so memory, not the database).
+    drop_checks: dict[str, dict] = {}
 
     @app.post("/api/telemetry")
     def post_telemetry(t: Telemetry, conn: sqlite3.Connection = Depends(get_conn)):
@@ -138,6 +142,8 @@ def create_app(db_path: Path | None = None, site_path: Path | None = None) -> Fa
             device = db.ensure_device(conn, t.device_id, ts)
             zone, source = resolve_zone(clean_zone(t.zone), gps_zone, device["zone"])
             db.insert_telemetry(conn, body, ts, zone, source)
+        if t.drop_check is not None:
+            drop_checks[t.device_id] = body["drop_check"]
         return {"ok": True}
 
     @app.post("/api/event")
@@ -188,7 +194,7 @@ def create_app(db_path: Path | None = None, site_path: Path | None = None) -> Fa
 
     @app.get("/api/devices")
     def get_devices(conn: sqlite3.Connection = Depends(get_conn)):
-        return [device_view(conn, d) for d in db.list_devices(conn)]
+        return [device_view(conn, d, drop_checks) for d in db.list_devices(conn)]
 
     @app.patch("/api/devices/{device_id}")
     def patch_device(device_id: str, patch: DevicePatch, conn: sqlite3.Connection = Depends(get_conn)):
@@ -196,7 +202,7 @@ def create_app(db_path: Path | None = None, site_path: Path | None = None) -> Fa
             raise HTTPException(status_code=404, detail=f"unknown device_id: {device_id}")
         with conn:
             db.update_device(conn, device_id, patch.model_dump(include=patch.model_fields_set))
-        return device_view(conn, db.get_device(conn, device_id))
+        return device_view(conn, db.get_device(conn, device_id), drop_checks)
 
     @app.get("/api/incidents")
     def get_incidents(

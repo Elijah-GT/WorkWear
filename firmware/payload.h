@@ -22,6 +22,15 @@ struct Telemetry {
   double lat = NAN;  // sent only when gps_fix is true
   double lon = NAN;
   char zone[ZONE_ID_MAX + 1] = "";  // from beacons; "" is sent as null
+  // Latest drop check (config.h DROP_DEBUG), so a helmet on battery can still be diagnosed.
+  // Sent as "drop_check" only when has_drop_check is true (PROTOCOL.md section 2.1).
+  bool has_drop_check = false;
+  uint32_t drop_uptime_ms = 0;     // when the check finished
+  uint32_t drop_freefall_ms = 0;   // longest run below FREEFALL_G
+  float drop_min_g = NAN;          // lowest reading in it
+  float drop_peak_g = NAN;         // hardest hit after it
+  uint32_t drop_need_ms = 0;       // FREEFALL_MIN_MS, so the dashboard can show the target
+  float drop_need_g = NAN;         // IMPACT_G
 };
 
 // A zone id safe to send: 1 to ZONE_ID_MAX characters of A-Z a-z 0-9 . _ -

@@ -58,6 +58,12 @@
 // To put it on the shared bus with the BNO085 instead, set these to I2C_SDA_PIN / I2C_SCL_PIN.
 #define BME280_SDA_PIN  25          // as wired (bench, 2026-11-07); was 32
 #define BME280_SCL_PIN  26          // was 33
+// The BME280's measuring range (datasheet). A reading outside it is a fault, not weather:
+// envRead() drops it and the sensor is restarted.
+#define BME280_MIN_C    -40.0f
+#define BME280_MAX_C     85.0f
+#define BME280_MIN_HPA  300.0f
+#define BME280_MAX_HPA 1100.0f
 #define BME280_CLOCK_HZ 100000      // the BME280 is read once a second; slow and safe is fine
 // The BME280's VIN is wired to GPIO27, so the firmware drives that pin HIGH (3.3 V) at start-up to
 // power it (it draws about 1 mA; a pin can supply that). Set -1 if VIN is moved to the 3V3 pin.

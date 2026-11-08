@@ -7,7 +7,7 @@ import {
   incidentPills, statusPill, sampleState, incidentPlace, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout,
   namePatch, notesPatch, reportBody, statusActions, summarize, zoneHeatView, zoneName, zoneOptions, zonePatch,
   fallMarkers, isMeasured, markerWhere, workerZone, zoneSourceText, zoneSpot, initials,
-  SHOW_HEAT, SECTIONS, parseRoute, routeHash, searchWorkers, workerStatus, filterIncidents, STATUS_FILTERS, tableTime, alertSummary,
+  SHOW_HEAT, SECTIONS, formatAirTemp, dropCheckText, parseRoute, routeHash, searchWorkers, workerStatus, filterIncidents, STATUS_FILTERS, tableTime, alertSummary,
   locationText, incidentTimeline, heatRows, incidentSpot,
 } from "../logic.js";
 
@@ -586,4 +586,15 @@ test("heat switched off: no Heat section, status colors instead of heat risk", (
   assert.equal(workerStatus(d, new Set(["sim-01"])).key, "fall");
   assert.equal(dotLabel(d), "Sam: online");
   assert.equal(dotLabel({ ...d, online: false }), "Sam: offline");
+});
+
+test("formatAirTemp shows °F; dropCheckText reads the helmet's drop check", () => {
+  assert.equal(formatAirTemp(null), null);
+  assert.equal(formatAirTemp(0), "32.0 °F");
+  assert.equal(formatAirTemp(23), "73.4 °F");
+  assert.equal(dropCheckText(null, 5000), null);
+  const check = { uptime_ms: 4200, freefall_ms: 43, min_g: 0.2, peak_g: 1.41, freefall_need_ms: 100, impact_need_g: 2.5 };
+  assert.equal(dropCheckText(check, 16200), "Free fall 43 ms (needs 100) · lowest 0.20 g · hit 1.41 g (needs 2.5) · 12 s ago");
+  // after a helmet restart its uptime is smaller: no age rather than a wrong one
+  assert.equal(dropCheckText({ uptime_ms: 9000, freefall_ms: 150 }, 100), "Free fall 150 ms");
 });

@@ -9,6 +9,22 @@ Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max
 Zone = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 
 
+class DropCheck(BaseModel):
+    """The helmet's latest drop check (firmware DROP_DEBUG), for bench testing on battery.
+
+    Optional in telemetry; kept in memory only (PROTOCOL.md section 2.1).
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    uptime_ms: int = Field(ge=0)          # helmet uptime when the check finished
+    freefall_ms: int = Field(ge=0)        # longest run below the free-fall threshold
+    min_g: float | None = None
+    peak_g: float | None = None
+    freefall_need_ms: int | None = None   # the helmet's FREEFALL_MIN_MS
+    impact_need_g: float | None = None    # the helmet's IMPACT_G
+
+
 class Telemetry(BaseModel):
     """POST /api/telemetry. Unknown extra fields are ignored so newer firmware still works."""
 
@@ -27,6 +43,7 @@ class Telemetry(BaseModel):
     gps_fix: bool
     lat: float | None = None
     lon: float | None = None
+    drop_check: DropCheck | None = None  # optional, diagnostics only (not stored in the database)
 
 
 class FallEvent(BaseModel):

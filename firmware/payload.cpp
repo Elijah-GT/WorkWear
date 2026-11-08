@@ -81,6 +81,16 @@ int buildTelemetryJson(char* buf, size_t cap, const char* device_id, const Telem
   o.num("lat", t.gps_fix ? t.lat : NAN, 6);
   o.add(",");
   o.num("lon", t.gps_fix ? t.lon : NAN, 6);
+  if (t.has_drop_check) {
+    o.add(",\"drop_check\":{\"uptime_ms\":%lu,\"freefall_ms\":%lu,", (unsigned long)t.drop_uptime_ms,
+          (unsigned long)t.drop_freefall_ms);
+    o.num("min_g", t.drop_min_g, 2);
+    o.add(",");
+    o.num("peak_g", t.drop_peak_g, 2);
+    o.add(",\"freefall_need_ms\":%lu,", (unsigned long)t.drop_need_ms);
+    o.num("impact_need_g", t.drop_need_g, 1);
+    o.add("}");
+  }
   o.add("}");
   return o.result();
 }

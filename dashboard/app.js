@@ -4,7 +4,7 @@
 
 import { getJSON, patchJSON, postJSON } from "./api.js";
 import {
-  SHOW_HEAT, STATUS_FILTERS, alertSummary, checkNewFalls, filterIncidents, formatAgo, formatClock, heatInfo, heatRows,
+  SHOW_HEAT, STATUS_FILTERS, alertSummary, dropCheckText, formatAirTemp, checkNewFalls, filterIncidents, formatAgo, formatClock, heatInfo, heatRows,
   incidentPills, incidentTimeline, incidentTitle, incidentWho, isMeasured, isSimulated, lastSeenText, locationText,
   mapLayout, namePatch, notesPatch, parseRoute, reportBody, routeHash, sampleState, searchWorkers, statusActions,
   statusPill, summarize, tableTime, workerStatus, workerZone, zoneName, zoneOptions, zonePatch,
@@ -446,7 +446,7 @@ function renderWorkersView() {
     zoneCell(r.zone, where.zone, where.source);
     // Air temperature at the helmet (per worker; no heat section or heat colors while SHOW_HEAT is off).
     const airC = d.latest?.temp_c;
-    setText(r.hi, airC == null ? "–" : `${airC.toFixed(1)} °C`);
+    setText(r.hi, formatAirTemp(airC) ?? "–");
     r.hi.title = "Air temperature at the helmet, not body temperature";
     setText(r.seen, lastSeenText(d, now));
   }, workerRows);
@@ -808,7 +808,7 @@ function renderWorkerPage() {
 
   const fmt = (v, unit, digits = 1) => (v == null ? null : `${v.toFixed(digits)} ${unit}`);
   setFacts($("wp-heat"), [
-    ["Air temperature", fmt(l?.temp_c, "°C") ?? "No reading"],
+    ["Air temperature", formatAirTemp(l?.temp_c) ?? "No reading"],
     ...(SHOW_HEAT ? [
       ["Humidity", fmt(l?.humidity_pct, "%", 0)],
       ["Heat index", fmt(l?.heat_index_c, "°C")],
@@ -820,6 +820,7 @@ function renderWorkerPage() {
     ["Status", d.online ? "Online" : "Offline (nothing for 5 s)"],
     ["Last seen", lastSeenText(d, now)],
     ["Helmet", l ? (l.worn ? "On (worn)" : "Off (not worn)") : null],
+    ["Last drop check", dropCheckText(d.drop_check, l?.uptime_ms)],
   ]);
 
   const list = filterIncidents(state.incidents, { deviceId: d.device_id }).slice(0, 10);

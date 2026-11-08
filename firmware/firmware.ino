@@ -28,6 +28,7 @@ static uint32_t last_env_ms = 0;
 static uint32_t last_status_ms = 0;
 static uint32_t imu_samples = 0;  // accel samples since the last status line
 static uint32_t last_imu_retry_ms = 0;
+static uint32_t last_env_retry_ms = 0;
 
 static void logStatus(const char* label, bool ok) {
   Serial.printf("# %s: %s\n", label, ok ? "OK" : "NOT FOUND");
@@ -98,27 +99,44 @@ static void handleFallResult(FallResult r, FallEvent& ev) {
   }
 }
 
-#if DROP_DEBUG && !LOG_CSV
-// One line per low-g moment of 20 ms or more: how long, how low, and the hardest hit just after.
+#if DROP_DEBUG
+// Drop check: from the first low-g run of 20 ms or more, watch DROP_WINDOW_MS and keep the
+// longest run below FREEFALL_G (the fall detector needs one unbroken run), the lowest reading
+// and the hardest hit. A bounce or a wobble can split one drop into several dips, so the
+// longest run is what counts. Printed on serial and sent with telemetry (drop_check).
+struct DropCheck {
+  bool valid;
+  uint32_t at_ms, freefall_ms;
+  float min_g, peak_g;
+};
+static DropCheck last_drop = {false, 0, 0, NAN, NAN};
+static const uint32_t DROP_WINDOW_MS = 1500;
+
 static void dropDebug(uint32_t t, float g) {
-  static uint32_t low_start = 0, low_ms = 0, low_end = 0;
-  static float low_min = 0, peak = 0;
-  static bool watching = false;
+  static bool in_run = false, watching = false;
+  static uint32_t run_start = 0, window_end = 0, longest = 0;
+  static float run_min = 0, lowest = 0, peak = 0;
   if (g < FREEFALL_G) {
-    if (!low_start) { low_start = t; low_min = g; }
-    else if (g < low_min) low_min = g;
-    return;
-  }
-  if (low_start) {
-    if (t - low_start >= 20) { low_ms = t - low_start; low_end = t; peak = g; watching = true; }
-    low_start = 0;
+    if (!in_run) { in_run = true; run_start = t; run_min = g; }
+    else if (g < run_min) run_min = g;
+  } else if (in_run) {
+    in_run = false;
+    const uint32_t len = t - run_start;
+    if (len >= 20) {
+      if (!watching) { watching = true; window_end = t + DROP_WINDOW_MS; longest = 0; lowest = run_min; peak = 0; }
+      if (len > longest) longest = len;
+      if (run_min < lowest) lowest = run_min;
+    }
   }
   if (!watching) return;
   if (g > peak) peak = g;
-  if (t - low_end >= IMPACT_WINDOW_MS) {
-    Serial.printf("# drop check: low-g %lu ms (needs %d), lowest %.2f g, then hardest hit %.2f g (needs %.1f)\n",
-                  (unsigned long)low_ms, FREEFALL_MIN_MS, low_min, peak, IMPACT_G);
+  if (!in_run && (int32_t)(t - window_end) >= 0) {
     watching = false;
+    last_drop = {true, t, longest, lowest, peak};
+#if !LOG_CSV
+    Serial.printf("# drop check: free fall %lu ms (needs %d), lowest %.2f g, hardest hit %.2f g (needs %.1f)\n",
+                  (unsigned long)longest, FREEFALL_MIN_MS, lowest, peak, IMPACT_G);
+#endif
   }
 }
 #endif
@@ -132,7 +150,7 @@ void loop() {
     const FallSample s = {millis(), accel_g, gyro_dps, tilt_deg, worn};
     FallEvent ev;
     const FallResult r = detector.update(s, &ev);
-#if DROP_DEBUG && !LOG_CSV
+#if DROP_DEBUG
     dropDebug(s.t_ms, s.accel_g);
 #endif
 #if LOG_CSV
@@ -149,6 +167,13 @@ void loop() {
     last_imu_retry_ms = now;
     logStatus("BNO085 IMU (retry)", imuBegin());
   }
+#if HAS_BME280
+  // Retry a missing BME280, or one envRead() switched off after an impossible reading.
+  if (!envOk() && now - last_env_retry_ms >= 5000) {
+    last_env_retry_ms = now;
+    logStatus("BME280 (retry)", envBegin());
+  }
+#endif
 
   // About once a second: read the BME280 and hand a fresh reading to the network task.
   if (now - last_env_ms >= ENV_PERIOD_MS) {
@@ -165,6 +190,17 @@ void loop() {
     t.tilt_deg = imuOk() ? tilt_deg : NAN;
     t.gps_fix = gps_has_fix = gpsFix(&t.lat, &t.lon);
     beaconZone(t.zone, sizeof(t.zone));
+#if DROP_DEBUG
+    if (last_drop.valid) {
+      t.has_drop_check = true;
+      t.drop_uptime_ms = last_drop.at_ms;
+      t.drop_freefall_ms = last_drop.freefall_ms;
+      t.drop_min_g = last_drop.min_g;
+      t.drop_peak_g = last_drop.peak_g;
+      t.drop_need_ms = FREEFALL_MIN_MS;
+      t.drop_need_g = IMPACT_G;
+    }
+#endif
     netPublishTelemetry(t);
 #if SERIAL_BRIDGE
     char buf[512];

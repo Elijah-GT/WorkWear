@@ -52,6 +52,7 @@ Sent about once per second.
 | `zone` | string or null | `null`, or the zone id of the strongest BLE beacon when beacons are on (section 1). Up to 32 characters `A-Z a-z 0-9 . _ -`; anything else is treated as `null`. |
 | `gps_fix` | boolean | `true` only when the GPS has a valid fix. |
 | `lat`, `lon` | number or null | Decimal degrees (WGS84). `null` unless `gps_fix` is `true`. |
+| `drop_check` | object, optional | Diagnostics for bench drop tests (firmware `DROP_DEBUG 1`). Left out until the helmet has seen a drop; then its **latest** check on every message: `{"uptime_ms":4200,"freefall_ms":43,"min_g":0.20,"peak_g":1.41,"freefall_need_ms":100,"impact_need_g":2.5}`. `uptime_ms` is when the check finished; `freefall_ms` the longest unbroken run below the free-fall threshold within 1.5 s; `min_g` the lowest reading; `peak_g` the hardest hit; the `*_need_*` fields are the helmet's thresholds. Not a fall event, and not stored in the database. |
 
 Response: `{"ok": true}`.
 
@@ -115,6 +116,8 @@ A device counts as **online** if its last telemetry arrived within the last **5 
             "accel_g":1.01,"tilt_deg":12.0,"gps_fix":false,"lat":null,"lon":null,
             "zone":"A2","zone_source":"manual"}}]
 ```
+
+Each device also has `drop_check`: the latest `drop_check` its telemetry carried (section 2.1), or `null`. The server keeps it in memory only, so it is `null` again after a restart.
 
 `latest` is `null` until the first telemetry arrives. `heat_level` is computed by the server from `heat_index_c` (section 7). The device's `zone` is the one assigned on the dashboard; `latest.zone` and `latest.zone_source` say where its latest reading placed it (section 3). The dashboard places a worker by `latest.zone` when `zone_source` is `"beacon"` or `"gps"`, and by the assigned `zone` otherwise.
 
@@ -225,4 +228,5 @@ The server maps `heat_index_c` to `heat_level` using the NWS heat index bands. T
 | 2026-11-06 | S3: added `sample_count` to `GET /api/hazards`; spelled out manual-report rules (known device, name copied from the device, `sim-` reports are sample) and that `PATCH /api/incidents` status can move in any direction. |
 | 2026-11-06 | D5: noted that the dashboard's heat layer uses the same heat bands (section 7). No field changes. |
 | 2026-11-07 | D7: zone ID examples updated for the room 1520 floor plan. No field changes. |
+| 2026-11-07 | F4: optional `drop_check` object on telemetry (bench diagnostics) and on each device in `GET /api/devices` (memory only). Old firmware and clients are unaffected. |
 | 2026-11-07 | Location (D8, decided by Elijah): helmets may send their own `zone` (BLE beacons); the server picks beacon, then GPS, then dashboard zone (section 3). New optional fields: `zone_source` on incidents and `latest`; `latest.zone`; `plan_x`/`plan_y` on incidents. New `GET /api/site`. `zones.json` may have `gps_points`. |

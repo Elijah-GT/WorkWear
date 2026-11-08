@@ -13,7 +13,7 @@ def test_no_devices_at_start(client):
 def test_device_shape(client):
     client.post("/api/telemetry", json=telemetry())
     [d] = client.get("/api/devices").json()
-    assert set(d) == {"device_id", "name", "zone", "online", "last_seen", "latest"}
+    assert set(d) == {"device_id", "name", "zone", "online", "last_seen", "latest", "drop_check"}
     assert set(d["latest"]) == {
         "uptime_ms", "worn", "temp_c", "humidity_pct", "pressure_hpa", "heat_index_c",
         "heat_level", "accel_g", "tilt_deg", "gps_fix", "lat", "lon", "zone", "zone_source",
@@ -88,3 +88,17 @@ def test_patch_unknown_device_is_404(client):
 def test_patch_bad_body_is_rejected(client, body):
     client.post("/api/telemetry", json=telemetry())
     assert client.patch("/api/devices/helmet-01", json=body).status_code == 422
+
+
+def test_drop_check_is_optional_and_kept_per_device(client):
+    client.post("/api/telemetry", json=telemetry())
+    assert client.get("/api/devices").json()[0]["drop_check"] is None
+
+    check = {"uptime_ms": 4200, "freefall_ms": 43, "min_g": 0.2, "peak_g": 1.41,
+             "freefall_need_ms": 100, "impact_need_g": 2.5}
+    client.post("/api/telemetry", json=telemetry(uptime_ms=5000, drop_check=check))
+    [d] = client.get("/api/devices").json()
+    assert d["drop_check"] == check
+    # a later reading without one keeps the last check
+    client.post("/api/telemetry", json=telemetry(uptime_ms=6000))
+    assert client.get("/api/devices").json()[0]["drop_check"] == check

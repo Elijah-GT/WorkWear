@@ -341,6 +341,26 @@ static void test_telemetry_json_full() {
   if (strcmp(buf, expected) != 0) printf("  got: %s\n", buf);
 }
 
+static void test_telemetry_json_drop_check() {
+  Telemetry t;  // readings NAN; a drop check present
+  t.uptime_ms = 5000;
+  t.has_drop_check = true;
+  t.drop_uptime_ms = 4200;
+  t.drop_freefall_ms = 43;
+  t.drop_min_g = 0.2f;
+  t.drop_peak_g = 1.41f;
+  t.drop_need_ms = 100;
+  t.drop_need_g = 2.5f;
+  char buf[512];
+  CHECK(buildTelemetryJson(buf, sizeof(buf), "helmet-01", t) > 0);
+  const char* tail =
+      ",\"lon\":null,\"drop_check\":{\"uptime_ms\":4200,\"freefall_ms\":43,\"min_g\":0.20,"
+      "\"peak_g\":1.41,\"freefall_need_ms\":100,\"impact_need_g\":2.5}}";
+  const size_t len = strlen(buf), tl = strlen(tail);
+  CHECK(len > tl && strcmp(buf + len - tl, tail) == 0);
+  if (!(len > tl && strcmp(buf + len - tl, tail) == 0)) printf("  got: %s\n", buf);
+}
+
 static void test_telemetry_json_missing_values_are_null() {
   Telemetry t;  // every reading NAN, no fix
   t.uptime_ms = 5;
@@ -570,6 +590,7 @@ int main() {
       {"millis() wraparound", test_millis_wraparound},
       {"heat index matches simulator", test_heat_index_matches_simulator},
       {"telemetry JSON", test_telemetry_json_full},
+      {"telemetry JSON with a drop check", test_telemetry_json_drop_check},
       {"telemetry JSON nulls", test_telemetry_json_missing_values_are_null},
       {"fall event JSON", test_fall_event_json},
       {"JSON buffer too small", test_json_too_small_buffer},

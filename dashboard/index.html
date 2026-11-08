@@ -55,7 +55,7 @@
       <a class="rail__item" href="#/map" data-section="map"><svg aria-hidden="true"><use href="#i-map"/></svg><span>Map</span></a>
       <a class="rail__item" href="#/workers" data-section="workers"><svg aria-hidden="true"><use href="#i-workers"/></svg><span>Workers</span><span class="rail__count" id="count-workers" title="Online / all helmets"></span></a>
       <a class="rail__item" href="#/incidents" data-section="incidents"><svg aria-hidden="true"><use href="#i-incidents"/></svg><span>Incidents</span><span class="rail__count" id="count-incidents" title="Pending: not reviewed yet"></span></a>
-      <a class="rail__item" href="#/heat" data-section="heat"><svg aria-hidden="true"><use href="#i-heat"/></svg><span>Heat</span></a>
+      <a class="rail__item heat-only" href="#/heat" data-section="heat"><svg aria-hidden="true"><use href="#i-heat"/></svg><span>Heat</span></a>
       <a class="rail__item" href="#/settings" data-section="settings"><svg aria-hidden="true"><use href="#i-settings"/></svg><span>Settings</span></a>
     </nav>
 
@@ -115,7 +115,7 @@
         </div>
         <p class="note">Click a worker for their profile. Zones set on the dashboard are simulated locations.</p>
         <table class="table table--workers">
-          <thead><tr><th>Worker</th><th>Status</th><th>Zone</th><th class="num">Heat index</th><th>Last seen</th></tr></thead>
+          <thead><tr><th>Worker</th><th>Status</th><th>Zone</th><th class="num">Air temp</th><th>Last seen</th></tr></thead>
           <tbody id="workers-rows"></tbody>
         </table>
         <p id="workers-empty" class="muted" hidden></p>
@@ -156,7 +156,7 @@
       </section>
 
       <!-- Heat -->
-      <section class="view view--heat" data-view="heat" aria-labelledby="h-heat">
+      <section class="view view--heat heat-only" data-view="heat" aria-labelledby="h-heat">
         <div class="view__head">
           <h2 id="h-heat">Heat</h2>
           <label class="field">Time
@@ -211,7 +211,7 @@
           <div class="card card--wide">
             <h3 class="subhead">What the labels mean</h3>
             <ul class="plainlist">
-              <li><strong>Heat risk</strong> comes from air temperature and humidity at the helmet (the heat index), not body temperature.</li>
+              <li class="heat-only"><strong>Heat risk</strong> comes from air temperature and humidity at the helmet (the heat index), not body temperature.</li>
               <li><strong>Simulated location</strong>: the zone was set on the dashboard. <strong>Located by BLE beacons or GPS</strong>: the helmet measured it.</li>
               <li><strong>Sample data</strong>: simulated helmets and seeded history, not real readings or real incidents.</li>
               <li><strong>Pending</strong>: not reviewed yet. Only <strong>confirmed</strong> incidents count on the map.</li>
@@ -277,9 +277,9 @@
               </label>
             </div>
             <div class="card">
-              <h3 class="subhead">Heat (air at the helmet)</h3>
+              <h3 class="subhead">Air temperature at the helmet</h3>
               <dl class="facts" id="wp-heat"></dl>
-              <p class="note">Heat index from air temperature and humidity at the helmet. Not body temperature.</p>
+              <p class="note">Measured in the air at the helmet, not body temperature.</p>
             </div>
             <div class="card">
               <h3 class="subhead">Helmet</h3>

@@ -226,6 +226,7 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 | 2026-11-07 | **First real fall on the dashboard** (USB bridge, no Wi-Fi yet): padded drop, free-fall 135-148 ms, peak 13.8 g, still 2.0 s, alert on the dashboard (incidents #10, #11, test drops, not sample). Drops with the USB cable pulling or onto a pillow did not trigger (free-fall 43 ms, hit 1.4 g). Thresholds unchanged | Claude |
 | 2026-11-07 | `/api/hazards` slowness fixed: index `telemetry(zone, ts, heat_index_c)` (77k rows: 2.7 s to 0.35 s), and the dashboard now fetches hazards separately every 10 s so it can never block fall alerts (it did: a 3 s hazards call made every refresh fail and hid a real fall). Supersedes the hazards row above | Claude |
 | 2026-11-07 | `firmware/serial_bridge.ps1` + `SERIAL_BRIDGE 1`: a helmet on USB posts its telemetry and fall events to the server without Wi-Fi (bench testing). `DROP_DEBUG 1` prints a per-drop check line (it under-counts free-fall when the reading flickers); **set it to 0 before the demo** | Claude |
+| 2026-11-07 | **Temperature narrowed to a per-worker reading (Elijah).** Firmware reads the BME280 as before (`HAS_BME280 1`; set 0 to leave it off). Dashboard `SHOW_HEAT = false`: no Heat tab, heat map, heat index or heat colors; the Workers table and worker profile show air temperature only. Protocol, server and simulator unchanged. Test drops #10 and #11 dismissed | Elijah / Claude |
 | | Battery runtime with Wi-Fi + GPS on: TBD (measure) | |
 | | Threshold values after tuning: TBD | |
 

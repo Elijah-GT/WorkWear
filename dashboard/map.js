@@ -10,7 +10,7 @@
 // initials, then a single "N workers" tag, so nothing spills into the next zone.
 
 import {
-  dotLabel, formatClock, hazardView, heatInfo, incidentSpot, incidentWho, initials, isMeasured,
+  SHOW_HEAT, dotLabel, formatClock, hazardView, heatInfo, incidentSpot, incidentWho, initials, isMeasured,
   mapLayout, markerWhere, workerZone, zoneHeatView,
 } from "./logic.js";
 import { el, setText } from "./ui.js";
@@ -25,7 +25,9 @@ const KEYS = {
       ["sw heat--extreme-caution", "Extreme caution"], ["sw heat--danger", "Danger"],
       ["sw heat--extreme-danger", "Extreme danger"], ["sw heat--none", "No reading"]]],
   ],
-  workers: ["Workers", [["sw heat--normal", "Dot color = heat risk"], ["ring", "Located by beacons or GPS"]]],
+  workers: ["Workers", [
+    SHOW_HEAT ? ["sw heat--normal", "Dot color = heat risk"] : ["sw heat--normal", "Online"],
+    ["ring", "Located by beacons or GPS"]]],
 };
 
 function buildKey(layer) {
@@ -166,8 +168,10 @@ export function createPlanMap(host, { layer = "incidents", mini = false, onZone 
       const cls = `dot${d.online ? "" : " dot--offline"}${fell ? " dot--fall" : ""}${measured ? " dot--measured" : ""}${
         near && near(d) ? " dot--near" : ""}`;
       if (dot.root.className !== cls) dot.root.className = cls;
-      dot.swatch.className = `dot__swatch ${heatInfo(level).css}`;
-      dot.short.className = `dot__initials ${heatInfo(level).css}`;
+      // Heat off: every dot is the "online" green; offline and fall have their own classes.
+      const color = SHOW_HEAT ? heatInfo(level).css : "heat--normal";
+      dot.swatch.className = `dot__swatch ${color}`;
+      dot.short.className = `dot__initials ${color}`;
       dot.root.dataset.id = d.device_id;
       setText(dot.name, d.name);
       setText(dot.short, initials(d.name));

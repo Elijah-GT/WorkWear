@@ -270,11 +270,12 @@ export function mapLayout(zonesConfig, devices) {
 }
 
 // Text for a worker's dot on the map (also its tooltip), so the color is never the only cue.
-export function dotLabel(device) {
+export function dotLabel(device, heat = SHOW_HEAT) {
   const level = device.latest?.heat_level ?? null;
   const info = heatInfo(level);
-  const parts = [level ? `${info.label} heat risk` : info.label];
+  const parts = heat ? [level ? `${info.label} heat risk` : info.label] : [];
   if (!device.online) parts.push("offline");
+  else if (!heat) parts.push("online");
   const where = workerZone(device);
   if (isMeasured(where.source)) parts.push(`located by ${zoneSourceText(where.source)}`);
   const l = device.latest;
@@ -424,7 +425,12 @@ export function hazardView(entry) {
 
 // --- App sections and pages (D12) -----------------------------------------------
 
-export const SECTIONS = ["map", "workers", "incidents", "heat", "settings"];
+// Heat section off (Elijah, 2026-11-07): no Heat tab, heat map, heat index or heat colors;
+// worker colors show status. Each worker's air temperature still shows (Workers table and
+// profile). Set true to bring the full heat views back.
+export const SHOW_HEAT = false;
+
+export const SECTIONS = ["map", "workers", "incidents", ...(SHOW_HEAT ? ["heat"] : []), "settings"];
 
 // The address after "#": "#/incident/42" -> { view: "incident", id: 42, section: "incidents" }.
 // Sections are "#/map", "#/workers", ... Pages are "#/incident/<id>" and "#/worker/<device id>".
@@ -454,10 +460,12 @@ export function searchWorkers(devices, query) {
   return (q ? devices.filter(hit) : [...devices]).sort(byName);
 }
 
-// Avatar color and words for a worker: a new fall first, then offline, then heat risk.
-export function workerStatus(device, fallenIds = new Set()) {
+// Avatar color and words for a worker: a new fall first, then offline, then heat risk
+// (or just "Online" while heat is switched off).
+export function workerStatus(device, fallenIds = new Set(), heat = SHOW_HEAT) {
   if (fallenIds.has(device.device_id)) return { key: "fall", label: "New fall", css: "status--fall" };
   if (!device.online) return { key: "offline", label: "Offline", css: "status--offline" };
+  if (!heat) return { key: "online", label: "Online", css: "heat--normal" };
   const level = device.latest?.heat_level ?? null;
   const info = heatInfo(level);
   return { key: level ?? "none", label: level ? `${info.label} heat risk` : "No heat reading", css: info.css };

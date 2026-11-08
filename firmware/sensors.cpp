@@ -159,6 +159,10 @@ static TwoWire* envBus() {
 }
 
 bool envBegin() {
+#if !HAS_BME280
+  env_ok = false;  // heat sensing switched off in config.h; envRead() then gives NAN (sent as null)
+  return false;
+#endif
 #if BME280_POWER_PIN >= 0
   // The BME280 is powered from a GPIO (config.h): switch it on and let it boot (datasheet: 2 ms).
   pinMode(BME280_POWER_PIN, OUTPUT);

@@ -49,7 +49,10 @@ void setup() {
   Wire.setClock(I2C_CLOCK_HZ);
   Wire.setTimeOut(I2C_TIMEOUT_MS);
   logStatus("BNO085 IMU", imuBegin());
-  if (!envBegin()) {
+  if (!HAS_BME280) {
+    envBegin();  // leaves the BME280 off; readings are sent as null
+    Serial.println("# BME280: switched off (HAS_BME280 0 in config.h), no heat readings");
+  } else if (!envBegin()) {
     logStatus("BME280", false);
     char power[12];
     if (BME280_POWER_PIN >= 0) snprintf(power, sizeof power, "GPIO%d", BME280_POWER_PIN);
@@ -177,11 +180,17 @@ void loop() {
     last_status_ms = now;
     char zone[ZONE_ID_MAX + 1];
     beaconZone(zone, sizeof(zone));
+    char env_text[80];
+    if (HAS_BME280) {
+      snprintf(env_text, sizeof env_text, "%.1f C, %.0f %% RH, heat index %.1f C, %.1f hPa", env.temp_c,
+               env.humidity_pct, heatIndexC(env.temp_c, env.humidity_pct), env.pressure_hpa);
+    } else {
+      snprintf(env_text, sizeof env_text, "heat sensing off");
+    }
     Serial.printf(
-        "# accel %.2f g (%lu/s), gyro %.1f deg/s, tilt %.0f deg, %s | %.1f C, %.0f %% RH, heat index %.1f C, %.1f hPa | "
+        "# accel %.2f g (%lu/s), gyro %.1f deg/s, tilt %.0f deg, %s | %s | "
         "GPS %s (%lu chars) | zone %s | Wi-Fi %s, %u falls queued | worn %d\n",
-        accel_g, rate, gyro_dps, tilt_deg, FallDetector::stateName(detector.state()), env.temp_c,
-        env.humidity_pct, heatIndexC(env.temp_c, env.humidity_pct), env.pressure_hpa,
+        accel_g, rate, gyro_dps, tilt_deg, FallDetector::stateName(detector.state()), env_text,
         gps_has_fix ? "fix" : "no fix", (unsigned long)gpsCharsReceived(),
         zone[0] ? zone : (HAS_BLE_BEACONS ? "unknown" : "set on dashboard"),
         netWifiConnected() ? "up" : "down", (unsigned)netPendingFalls(), worn ? 1 : 0);

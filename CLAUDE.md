@@ -7,7 +7,7 @@ Read this file first, then `PLAN.md`. This brief is for any AI agent (and human)
 A helmet-mounted safety sensor for construction workers. The MVP:
 
 1. **Detects falls** from head/helmet motion and alerts a supervisor dashboard.
-2. **Monitors heat exposure** (ambient temperature and humidity at the helmet, shown as a heat index).
+2. **Monitors heat exposure** (ambient temperature and humidity at the helmet, shown as a heat index). **Narrowed for now** (see decisions): each worker's air temperature only, no heat section.
 3. **Shows it all on a dashboard**: named devices, incident list, location (zone on a site map), and a heat color per worker.
 4. **Marks hazard zones** (stretch goal, built after the incident list works): confirmed falls and reported injuries appear as red markers or shaded zones on the site map, so a supervisor can see where incidents cluster.
 
@@ -31,6 +31,7 @@ Framing for outsiders: we are student researchers exploring whether wearable fal
 - Indoor zone: **set per device on the dashboard** by the supervisor. The server stamps that zone on each telemetry message and event it receives. The UI labels the zone as simulated. Decided 2026-11-06.
 - **Measured location beats the dashboard zone** (decided by Elijah 2026-11-07). The server uses, in order: a zone the helmet reports itself from BLE zone beacons (firmware `HAS_BLE_BEACONS 1`, off by default), then the zone its GPS fix falls in (needs `gps_points` in `dashboard/zones.json`), then the dashboard zone. Each zone records its source (`zone_source`), and the UI marks measured locations. Falls show as red dots on the floor plan: at the GPS position when there is one, otherwise at an approximate spot in their zone, labeled approximate.
 - **Sample labels** (decided by Elijah 2026-11-07): one "Sample data" badge in the dashboard header while simulated helmets or sample incidents are on. When real helmets or real incidents are also shown, each sample row gets its own Sample pill too, and an incident page always says it is sample data. Sample history comes from `server/seed.py` (marked sample, `sim-` helmets).
+- **Temperature is per worker only** (decided by Elijah 2026-11-07). The helmet reads the BME280 (`HAS_BME280 1`) and sends all fields as before. The dashboard shows each worker's **air temperature** in the Workers table and on their profile, and nothing else: no Heat tab, heat map, heat index or heat colors (`SHOW_HEAT = false` in `dashboard/logic.js`); worker colors show status (online, offline, new fall). Protocol and server are unchanged. Pressure is read and stored but not used yet (ideas: floor tracking with a reference barometer, fall height).
 - Worker names: incidents store a **snapshot** of the device's name at the time the incident is created, so history stays correct if a helmet is reassigned. Decided 2026-11-06.
 - Worn sensor: **attempt it, with a fallback**. If the sensor is cut or not working, firmware always sends `worn: true` (config flag `HAS_WORN_SENSOR 0`), and acceptance test A6 becomes a stretch test. Say so in the pitch. Decided 2026-11-06.
 

@@ -4,7 +4,7 @@
 
 import { getJSON, patchJSON, postJSON } from "./api.js";
 import {
-  STATUS_FILTERS, alertSummary, checkNewFalls, filterIncidents, formatAgo, formatClock, heatInfo, heatRows,
+  SHOW_HEAT, STATUS_FILTERS, alertSummary, checkNewFalls, filterIncidents, formatAgo, formatClock, heatInfo, heatRows,
   incidentPills, incidentTimeline, incidentTitle, incidentWho, isMeasured, isSimulated, lastSeenText, locationText,
   mapLayout, namePatch, notesPatch, parseRoute, reportBody, routeHash, sampleState, searchWorkers, statusActions,
   statusPill, summarize, tableTime, workerStatus, workerZone, zoneName, zoneOptions, zonePatch,
@@ -54,6 +54,9 @@ async function loadZones() {
   }
   render();
 }
+
+// Heat switched off (logic.js SHOW_HEAT): CSS hides every .heat-only part of the page.
+document.documentElement.classList.toggle("no-heat", !SHOW_HEAT);
 
 let timer = null;
 let inFlight = false;
@@ -441,9 +444,10 @@ function renderWorkersView() {
     setPills(r.pills, pills);
     const where = workerZone(d);
     zoneCell(r.zone, where.zone, where.source);
-    const hiVal = d.latest?.heat_index_c;
-    setText(r.hi, hiVal == null ? "–" : `${hiVal.toFixed(1)} °C`);
-    r.hi.title = heatInfo(d.latest?.heat_level ?? null).label;
+    // Air temperature at the helmet (per worker; no heat section or heat colors while SHOW_HEAT is off).
+    const airC = d.latest?.temp_c;
+    setText(r.hi, airC == null ? "–" : `${airC.toFixed(1)} °C`);
+    r.hi.title = "Air temperature at the helmet, not body temperature";
     setText(r.seen, lastSeenText(d, now));
   }, workerRows);
   const empty = $("workers-empty");
@@ -804,10 +808,12 @@ function renderWorkerPage() {
 
   const fmt = (v, unit, digits = 1) => (v == null ? null : `${v.toFixed(digits)} ${unit}`);
   setFacts($("wp-heat"), [
-    ["Air temperature", fmt(l?.temp_c, "°C")],
-    ["Humidity", fmt(l?.humidity_pct, "%", 0)],
-    ["Heat index", fmt(l?.heat_index_c, "°C")],
-    ["Heat risk", heatInfo(l?.heat_level ?? null).label],
+    ["Air temperature", fmt(l?.temp_c, "°C") ?? "No reading"],
+    ...(SHOW_HEAT ? [
+      ["Humidity", fmt(l?.humidity_pct, "%", 0)],
+      ["Heat index", fmt(l?.heat_index_c, "°C")],
+      ["Heat risk", heatInfo(l?.heat_level ?? null).label],
+    ] : []),
   ]);
   setFacts($("wp-helmet"), [
     ["Device ID", d.device_id],

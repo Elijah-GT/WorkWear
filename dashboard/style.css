@@ -539,3 +539,7 @@ body[data-view="map"] .view[data-view="map"] { display: flex; flex: 1; min-heigh
 @media (prefers-reduced-motion: reduce) {
   .alert[data-state="active"], .alert[data-state="active"] .alert__icon, .marker--alert::after, .dot--fall { animation: none; }
 }
+
+/* Heat sensing switched off (logic.js SHOW_HEAT = false): hide every heat-only part. */
+.no-heat .heat-only { display: none !important; }
+.avatar[data-status="online"] { color: var(--heat-normal); }

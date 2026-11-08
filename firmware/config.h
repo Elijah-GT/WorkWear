@@ -49,6 +49,10 @@
 #define I2C_TIMEOUT_MS 200          // the BNO085 holds the bus while it boots; the ESP32 default is 50 ms
 #define IMU_STALL_MS   1000         // no accel report this long = IMU stalled: reset and restart it
 #define BNO085_INT_PIN 18          // as wired (found on the bench); the firmware reads the IMU only while INT is low (polling stalled)
+// 1 = read the BME280 (temperature, humidity, pressure). Back on 2026-11-07 (Elijah): the
+// dashboard shows each worker's air temperature (no heat section; dashboard/logic.js SHOW_HEAT).
+// 0 = not started or powered; telemetry sends those fields as null (PROTOCOL.md allows it).
+#define HAS_BME280    1
 #define BME280_ADDR   0x76          // 0x77 on some boards
 // The BME280 is wired to its own pins and runs on the ESP32's second I2C controller (Wire1).
 // To put it on the shared bus with the BNO085 instead, set these to I2C_SDA_PIN / I2C_SCL_PIN.

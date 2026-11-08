@@ -7,7 +7,7 @@ import {
   incidentPills, statusPill, sampleState, incidentPlace, incidentTitle, incidentWho, isSimulated, lastSeenText, mapLayout,
   namePatch, notesPatch, reportBody, statusActions, summarize, zoneHeatView, zoneName, zoneOptions, zonePatch,
   fallMarkers, isMeasured, markerWhere, workerZone, zoneSourceText, zoneSpot, initials,
-  parseRoute, routeHash, searchWorkers, workerStatus, filterIncidents, STATUS_FILTERS, tableTime, alertSummary,
+  SHOW_HEAT, SECTIONS, parseRoute, routeHash, searchWorkers, workerStatus, filterIncidents, STATUS_FILTERS, tableTime, alertSummary,
   locationText, incidentTimeline, heatRows, incidentSpot,
 } from "../logic.js";
 
@@ -247,11 +247,11 @@ test("mapLayout without a zones file puts everyone off the map", () => {
 
 test("dotLabel gives name, heat risk, and offline / GPS details", () => {
   const d = { ...dev("helmet-01", "A1", "Sam"), latest: { heat_level: "danger", gps_fix: false, lat: null, lon: null } };
-  assert.equal(dotLabel(d), "Sam: Danger heat risk");
-  assert.equal(dotLabel({ ...d, online: false }), "Sam: Danger heat risk, offline");
-  assert.equal(dotLabel({ ...d, latest: { heat_level: "normal", gps_fix: true, lat: 45.1, lon: -122.5 } }),
+  assert.equal(dotLabel(d, true), "Sam: Danger heat risk");
+  assert.equal(dotLabel({ ...d, online: false }, true), "Sam: Danger heat risk, offline");
+  assert.equal(dotLabel({ ...d, latest: { heat_level: "normal", gps_fix: true, lat: 45.1, lon: -122.5 } }, true),
     "Sam: Normal heat risk, GPS 45.10000, -122.50000");
-  assert.equal(dotLabel(dev("h", null, "Bo")), "Bo: No reading");
+  assert.equal(dotLabel(dev("h", null, "Bo"), true), "Bo: No reading");
 });
 
 // --- Stretch: review, reports, hazard map (D5) --------------------------------
@@ -400,8 +400,8 @@ test("mapLayout puts a located worker in the measured zone", () => {
 });
 
 test("dotLabel and incidentPlace say when a location was measured", () => {
-  assert.equal(dotLabel(located("E", "beacon")), "Bo: No reading, located by beacons");
-  assert.equal(dotLabel(located("W", "manual")), "Bo: No reading");
+  assert.equal(dotLabel(located("E", "beacon"), true), "Bo: No reading, located by beacons");
+  assert.equal(dotLabel(located("W", "manual"), true), "Bo: No reading");
   assert.equal(incidentPlace(inc({ zone_source: "beacon" })), "Zone A2 (beacons)");
   assert.equal(incidentPlace(inc({ zone_source: "gps" })), "Zone A2 (GPS)");
   assert.equal(incidentPlace(inc({ zone_source: "manual" })), "Zone A2");
@@ -512,10 +512,10 @@ test("searchWorkers matches name or device ID, any case, sorted by name", () => 
 
 test("workerStatus: new fall, then offline, then heat risk", () => {
   const d = { ...dev("sim-01", null), latest: { heat_level: "caution" } };
-  assert.equal(workerStatus(d).css, "heat--caution");
+  assert.equal(workerStatus(d, new Set(), true).css, "heat--caution");
   assert.equal(workerStatus({ ...d, online: false }).key, "offline");
   assert.equal(workerStatus({ ...d, online: false }, new Set(["sim-01"])).key, "fall");
-  assert.equal(workerStatus(dev("sim-01", null)).label, "No heat reading");
+  assert.equal(workerStatus(dev("sim-01", null), new Set(), true).label, "No heat reading");
 });
 
 test("filterIncidents: newest first by time, by status, device, zone, and time window", () => {
@@ -574,4 +574,16 @@ test("incidentSpot places any incident, reports and dismissed ones too", () => {
   assert.equal(incidentSpot(fallInc({ plan_x: 125, plan_y: 300 }), layout).exact, true);
   assert.equal(incidentSpot(fallInc({ zone: "nowhere" }), layout), null);
   assert.equal(incidentSpot(fallInc(), mapLayout(grid, [])), null);
+});
+
+test("heat switched off: no Heat section, status colors instead of heat risk", () => {
+  assert.equal(SHOW_HEAT, false);
+  assert.ok(!SECTIONS.includes("heat"));
+  assert.deepEqual(parseRoute("#/heat"), { view: "map", id: null, section: "map" });
+  const d = { ...dev("sim-01", null, "Sam"), latest: { heat_level: "danger", gps_fix: false, lat: null, lon: null } };
+  assert.deepEqual(workerStatus(d), { key: "online", label: "Online", css: "heat--normal" });
+  assert.equal(workerStatus({ ...d, online: false }).key, "offline");
+  assert.equal(workerStatus(d, new Set(["sim-01"])).key, "fall");
+  assert.equal(dotLabel(d), "Sam: online");
+  assert.equal(dotLabel({ ...d, online: false }), "Sam: offline");
 });

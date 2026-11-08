@@ -29,22 +29,31 @@
 #define SERIAL_BAUD 115200
 #endif
 #define STATUS_PERIOD_MS 5000       // human-readable status line (off while LOG_CSV is 1)
+// 1 = also print each telemetry message and fall event as one JSON line on serial
+// ("@telemetry {...}", "@event {...}"). firmware/serial_bridge.ps1 posts them to the server, so a
+// helmet plugged into the laptop by USB shows on the dashboard without Wi-Fi. The server ignores
+// a fall event it already got over Wi-Fi.
+#define SERIAL_BRIDGE 1
+// 1 = print one "# drop check" line per low-g moment (free-fall length, lowest g, hardest hit
+// within IMPACT_WINDOW_MS after it), to see which fall step a test drop misses. Off for the demo.
+#define DROP_DEBUG 1
 
 // ---------------- I2C: BNO085 (and the BME280's own bus below) ----------------
-#define I2C_SDA_PIN   21
-#define I2C_SCL_PIN   22
+#define I2C_SDA_PIN   21            // as wired (bench, 2026-11-07); moved off GPIO5 (a boot-strap pin)
+#define I2C_SCL_PIN   17            // as wired; was 22
 #define I2C_CLOCK_HZ  400000        // 100000 is too slow for the 200 Hz accel reports (read 0.00 g in a test)
 #define BNO085_ADDR   0x4B          // our GY-BNO085 answers at 0x4B (I2C scan 2026-11-07); some boards use 0x4A
-#define BNO085_RST_PIN 25           // as wired (was 4); imuBegin() pulses it, which un-sticks the IMU (and
+#define BNO085_RST_PIN 19           // as wired (was 4, then 25); imuBegin() pulses it, which un-sticks the IMU (and
                                     // the I2C bus) after an ESP32 reset without power-cycling it. -1 = not wired
 #define BNO085_BOOT_MS 300          // wait after the reset pulse before talking to the IMU
 #define I2C_TIMEOUT_MS 200          // the BNO085 holds the bus while it boots; the ESP32 default is 50 ms
-#define BNO085_INT_PIN 19           // wired; the firmware reads the IMU only while INT is low (polling stalled)
+#define IMU_STALL_MS   1000         // no accel report this long = IMU stalled: reset and restart it
+#define BNO085_INT_PIN 18          // as wired (found on the bench); the firmware reads the IMU only while INT is low (polling stalled)
 #define BME280_ADDR   0x76          // 0x77 on some boards
 // The BME280 is wired to its own pins and runs on the ESP32's second I2C controller (Wire1).
 // To put it on the shared bus with the BNO085 instead, set these to I2C_SDA_PIN / I2C_SCL_PIN.
-#define BME280_SDA_PIN  32
-#define BME280_SCL_PIN  33
+#define BME280_SDA_PIN  25          // as wired (bench, 2026-11-07); was 32
+#define BME280_SCL_PIN  26          // was 33
 #define BME280_CLOCK_HZ 100000      // the BME280 is read once a second; slow and safe is fine
 // The BME280's VIN is wired to GPIO27, so the firmware drives that pin HIGH (3.3 V) at start-up to
 // power it (it draws about 1 mA; a pin can supply that). Set -1 if VIN is moved to the 3V3 pin.
@@ -66,7 +75,12 @@
 // ---------------- GPS (GY-NEO6MV2 on UART2) ----------------
 #define GPS_BAUD          9600
 #define ESP_GPS_RX_PIN    16        // ESP32 receives here: connect to the GPS TX pin
-#define ESP_GPS_TX_PIN    17        // ESP32 sends here: connect to the GPS RX pin
+#define ESP_GPS_TX_PIN    23        // ESP32 sends here (not used yet): GPS RX pin. Was 17, now the IMU's SCL
+#if ESP_GPS_RX_PIN == I2C_SDA_PIN || ESP_GPS_RX_PIN == I2C_SCL_PIN || ESP_GPS_TX_PIN == I2C_SDA_PIN || \
+    ESP_GPS_TX_PIN == I2C_SCL_PIN || ESP_GPS_RX_PIN == BME280_SDA_PIN || ESP_GPS_RX_PIN == BME280_SCL_PIN || \
+    ESP_GPS_TX_PIN == BME280_SDA_PIN || ESP_GPS_TX_PIN == BME280_SCL_PIN
+#error "A GPS pin is also an I2C pin in config.h: the GPS serial port would take it over"
+#endif
 #define GPS_MAX_AGE_MS    3000      // a fix older than this counts as no fix
 
 // ---------------- Worn sensor ----------------

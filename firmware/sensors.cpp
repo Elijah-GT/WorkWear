@@ -30,6 +30,7 @@ static float last_tilt_deg = NAN;
 static const int kAccelQueue = 32;
 static float accel_queue[kAccelQueue];
 static int accel_head = 0, accel_count = 0;
+static uint32_t last_accel_ms = 0;  // when the last accel report arrived (stall watchdog)
 
 static void onImuReport(void*, sh2_SensorEvent_t* event) {
   sh2_SensorValue_t v;
@@ -41,6 +42,7 @@ static void onImuReport(void*, sh2_SensorEvent_t* event) {
       if (accel_count == kAccelQueue) { accel_head = (accel_head + 1) % kAccelQueue; accel_count--; }  // drop oldest
       accel_queue[(accel_head + accel_count) % kAccelQueue] = g;
       accel_count++;
+      last_accel_ms = millis();
       break;
     }
     case SH2_GYROSCOPE_CALIBRATED: {
@@ -103,6 +105,7 @@ bool imuBegin() {
   while (millis() - t0 < 2000 && !bno.wasReset()) sh2_service();
   imuSettle(200);
   accel_head = accel_count = 0;
+  last_accel_ms = millis();
   imu_ok = enableImuReports();
   return imu_ok;
 }
@@ -116,7 +119,16 @@ bool imuPoll(float* accel_g, float* gyro_dps, float* tilt_deg) {
   // Read only while INT says a transfer is waiting; a few per call, so the rest of loop() runs.
   for (int i = 0; i < 4 && digitalRead(BNO085_INT_PIN) == LOW; i++) sh2_service();
 
-  if (accel_count == 0) return false;
+  if (accel_count == 0) {
+    // Stall watchdog. Bench, 2026-11-07: after a test drop the stream stopped and the firmware
+    // kept the last (bogus) reading for minutes, so later drops went unseen. With no accel
+    // report for IMU_STALL_MS, mark the IMU failed: loop() then resets and restarts it.
+    if (millis() - last_accel_ms > IMU_STALL_MS) {
+      Serial.printf("# BNO085: no motion data for %d ms, restarting it\n", IMU_STALL_MS);
+      imu_ok = false;
+    }
+    return false;
+  }
   *accel_g = accel_queue[accel_head];
   accel_head = (accel_head + 1) % kAccelQueue;
   accel_count--;

@@ -59,19 +59,35 @@ let timer = null;
 let inFlight = false;
 let againAfter = false;
 
+// The map summary (/api/hazards) is the slowest request (0.5-3 s once the simulator has
+// filled the database), and confirmed counts and peak heat change slowly. So it runs on
+// its own, at most every HAZARDS_MS, and never holds up worker readings or fall alerts
+// (bench, 2026-11-07: waiting on it made every refresh fail and a real fall never showed).
+const HAZARDS_MS = 10000;
+let hazardsAt = 0;
+let hazardsInFlight = false;
+function refreshHazards(force = false) {
+  if (hazardsInFlight || (!force && Date.now() - hazardsAt < HAZARDS_MS)) return;
+  hazardsInFlight = true;
+  hazardsAt = Date.now();
+  getJSON(`/api/hazards${state.hours ? `?hours=${state.hours}` : ""}`)
+    .then((h) => { state.hazards = h; render(); })
+    .catch(() => {})  // keep the last map data; the connection status comes from refresh()
+    .finally(() => { hazardsInFlight = false; });
+}
+
 async function refresh() {
   if (inFlight) { againAfter = true; return; }
   inFlight = true;
   clearTimeout(timer);
+  refreshHazards();
   try {
-    const [devices, incidents, hazards] = await Promise.all([
+    const [devices, incidents] = await Promise.all([
       getJSON("/api/devices"),
       getJSON(`/api/incidents?limit=${INCIDENT_LIMIT}`),
-      getJSON(`/api/hazards${state.hours ? `?hours=${state.hours}` : ""}`),
     ]);
     state.devices = devices;
     state.incidents = incidents;
-    state.hazards = hazards;
     // A fall that was confirmed or dismissed has been dealt with, so its alert goes away.
     const statusById = new Map(incidents.map((i) => [i.id, i.status]));
     state.alerts = state.alerts
@@ -97,7 +113,8 @@ async function refresh() {
   timer = setTimeout(refresh, REFRESH_MS);
 }
 
-const refreshNow = () => refresh();
+// After a change (confirm, dismiss, time window), update the map summary at once too.
+const refreshNow = () => { hazardsAt = 0; refresh(); };
 
 // --- Address: which section or page is showing ---------------------------------
 

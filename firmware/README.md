@@ -41,13 +41,15 @@ Reads the BNO085 (motion), BME280 (temperature, humidity, pressure), NEO-6M GPS 
 | Part | Part pin | ESP32 |
 |---|---|---|
 | BNO085 | VIN / GND | 3V3 / GND |
-| BNO085 | SDA / SCL | GPIO21 / GPIO22 |
-| BNO085 | RST | GPIO4 |
-| BNO085 | INT | GPIO19 (wired, not used yet; the library polls) |
+| BNO085 | SDA / SCL | GPIO21 / GPIO17 |
+| BNO085 | RST | GPIO19 (needed: the firmware resets the IMU at start-up to free a stuck I2C bus) |
+| BNO085 | INT | GPIO18 (needed: the firmware reads the IMU only while INT is low) |
 | BME280 | VIN / GND | GPIO27 (the firmware drives it HIGH to power the sensor, `BME280_POWER_PIN`) / GND |
-| BME280 | SDA / SCL | GPIO32 / GPIO33 (its own I2C bus, `Wire1`) |
+| BME280 | SDA / SCL | GPIO25 / GPIO26 (its own I2C bus, `Wire1`) |
 | GPS NEO-6M | VCC / GND | 3V3 / GND |
-| GPS NEO-6M | TX / RX | GPIO16 / GPIO17 (crossed: GPS TX goes to the ESP32's receive pin) |
+| GPS NEO-6M | TX / RX | GPIO16 / GPIO23 (crossed: GPS TX goes to the ESP32's receive pin; GPIO17 is now the IMU's SCL) |
+
+Pins as wired on the bench on 2026-11-07, all set in `config.h`. A build error stops a GPS pin from landing on an I2C pin. The status line shows the IMU rate, e.g. `accel 0.98 g (255/s)`: about 200-260 per second means the stream is alive.
 | Worn sensor (optional) | signal / GND | GPIO26 / GND (switch to GND; set `HAS_WORN_SENSOR 1`) |
 
 RST, INT and the worn-sensor pins were picked for this code; change them in `config.h` if the wiring differs. The full wiring write-up belongs in `docs/WIRING.md` (W1).

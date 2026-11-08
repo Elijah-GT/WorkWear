@@ -16,19 +16,36 @@ static ZoneTracker tracker;
 static char shared_zone[ZONE_ID_MAX + 1] = "";
 static portMUX_TYPE zone_lock = portMUX_INITIALIZER_UNLOCKED;
 
+struct BeaconReading { char zone[ZONE_ID_MAX + 1]; int rssi; };
+static QueueHandle_t beacon_inbox;
+
+class ZoneCallbacks : public BLEAdvertisedDeviceCallbacks {
+  void onResult(BLEAdvertisedDevice d) override {
+    if (!d.haveName()) return;
+    BeaconReading reading;
+    if (!ZoneTracker::zoneFromName(d.getName().c_str(), reading.zone, sizeof(reading.zone))) return;
+    reading.rssi = d.getRSSI();
+    xQueueSend(beacon_inbox, &reading, 0);
+  }
+};
+static ZoneCallbacks callbacks;
+
 static void scanTask(void*) {
   BLEScan* scan = BLEDevice::getScan();
+  // Duplicate callbacks avoid retaining every nearby device in BLEScan's heap map.
+  // Keep only valid zone readings in a bounded queue; tracker stays on this task.
+  scan->setAdvertisedDeviceCallbacks(&callbacks, true);
   scan->setActiveScan(true);  // also read names sent in scan responses
   scan->setInterval(100);
   scan->setWindow(80);
   char last[ZONE_ID_MAX + 1] = "";
   for (;;) {
-    BLEScanResults* found = scan->start(BEACON_SCAN_S, false);  // blocks for the scan
-    if (found != nullptr) {
-      for (int i = 0; i < found->getCount(); i++) {
-        BLEAdvertisedDevice d = found->getDevice(i);
-        if (d.haveName()) tracker.heard(d.getName().c_str(), d.getRSSI());
-      }
+    scan->start(BEACON_SCAN_S, false);  // blocks for the scan
+    BeaconReading reading;
+    while (xQueueReceive(beacon_inbox, &reading, 0) == pdTRUE) {
+      char name[sizeof(BEACON_NAME_PREFIX) + ZONE_ID_MAX];
+      snprintf(name, sizeof(name), "%s%s", BEACON_NAME_PREFIX, reading.zone);
+      tracker.heard(name, reading.rssi);
     }
     tracker.endScan(millis());
     scan->clearResults();  // free the results' memory
@@ -45,6 +62,8 @@ static void scanTask(void*) {
 }
 
 void beaconsBegin() {
+  beacon_inbox = xQueueCreate(32, sizeof(BeaconReading));
+  if (!beacon_inbox) { Serial.println("# ERROR: BLE beacon queue allocation failed"); return; }
   BLEDevice::init("");
   // Same core as Wi-Fi: the ESP32 shares one radio between Wi-Fi and Bluetooth. Wi-Fi modem
   // sleep must stay on (the Arduino default) for the two to work together.

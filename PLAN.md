@@ -6,7 +6,7 @@ Related: customer discovery email (student-researcher outreach) is in the team d
 
 ## 1. Goal
 
-By the end of the build, show a working helmet prototype that detects a staged fall, reports it to a dashboard within a few seconds, and shows heat exposure and location for named workers. Indoor demo with Wi-Fi.
+By the end of the build, show a working helmet prototype that detects a staged fall, reports it to a dashboard within a few seconds, and shows air temperature and zone location (from BLE beacons) for named workers. Indoor demo with Wi-Fi.
 
 ## 2. MVP scope
 
@@ -15,11 +15,11 @@ From the whiteboard table (Hardware / Dashboard / Data Analysis):
 | Area | In the MVP | Notes |
 |---|---|---|
 | Hardware | ESP32, IMU, temperature sensor, wiring, housing, body-dynamics data | **[decided]** Hardware list: ESP32, GY-BNO085 (IMU), BME280 (barometer, temp, humidity), NULLLAB 1200 mAh LiPo module, GY-NEO6MV2 (NEO-6M) GPS with ceramic antenna, 3D-printed housing and hat clip. LEDs on hand, for later |
-| Dashboard | Mapping, incident compilation, local data storage, assign names | Zone map indoors. Heat color per worker |
+| Dashboard | Mapping, incident compilation, local data storage, assign names | Zone map indoors. Air temperature per worker (heat colors off, D13) |
 | Dashboard (stretch) | Hazard zones: red markers or shaded zones where confirmed falls and reported injuries happened | Built after the incident list works. A supervisor confirms incidents |
 | Data analysis | Programming and detecting falls, location data, data transfer to dashboard | Fall detection runs on the device |
 
-**Later, only if time:** heart rate, Raspberry Pi networking, navigation lights (LEDs on a rescuer's helmet that point toward the fallen worker). The GPS module is mounted for the MVP but will not fix indoors, so the indoor demo uses zones; outdoor GPS tracking is a bonus.
+**Later, only if time:** heart rate, Raspberry Pi networking, navigation lights (LEDs on a rescuer's helmet that point toward the fallen worker). GPS is not used in the indoor demo (decided 2026-11-07); location comes from BLE zone beacons, with the dashboard zone as a fallback. Outdoor GPS tracking is a bonus.
 
 ## 3. Architecture **[proposed]**
 
@@ -35,11 +35,11 @@ Laptop: server (HTTP API + SQLite) -> web dashboard
 
 ## 4. Acceptance criteria (how we know it works)
 
-- [ ] A1. The ESP32 runs on battery and streams telemetry to the dashboard for 10+ minutes without a reset.
-- [ ] A2. A staged padded drop produces a "fall" incident on the dashboard within about 3 seconds.
-- [ ] A3. Normal activity does not trigger false alarms across a set of trials: walking, sitting, nodding, looking down, climbing steps, and setting the helmet down gently. Record the number of trials and results.
-- [ ] A4. Heat color and heat index on the dashboard change when the sensor is exposed to warmer air.
-- [ ] A5. The dashboard shows named devices, an incident list that persists after a refresh, and a location (zone) per device.
+- [ ] A1. The ESP32 runs on battery and streams telemetry to the dashboard for 10+ minutes without a reset. *Runs on battery over Wi-Fi with no resets seen (2026-11-07), but not yet timed for 10 minutes.*
+- [ ] A2. A staged padded drop produces a "fall" incident on the dashboard within about 3 seconds. *Works on battery over Wi-Fi (#13-#17, 11-14 g), and alerts looked near-instant, but the delay has not been timed and recorded.*
+- [ ] A3. Normal activity does not trigger false alarms across a set of trials: walking, sitting, nodding, looking down, climbing steps, and setting the helmet down gently. Record the number of trials and results. **Not started; the most important open test.**
+- [ ] A4. The worker's air temperature on the dashboard rises when the sensor is exposed to warmer air. *Reworded 2026-11-07: heat colors and heat index are off (D13), so this now checks the per-worker air temperature (shown in °F).*
+- [x] A5. The dashboard shows named devices, an incident list that persists after a refresh, and a location (zone) per device. *Checked 2026-11-07 with helmet-01 ("Bench helmet"): incidents are stored in SQLite and survive a refresh; zone comes from the 1520-S beacon.*
 - [ ] A6. The helmet being taken off or set down does not raise a fall alert (worn detection). If the worn sensor is cut, A6 becomes a stretch test and the firmware sends `worn: true` always; say so in the pitch.
 - [x] A7 (stretch). Confirmed incidents appear as hazard markers or shaded zones on the map. Dismissed incidents do not. *Passed 2026-11-06 with simulator and test data (D5 browser checks); recheck at the demo rehearsal.*
 
@@ -48,29 +48,29 @@ Laptop: server (HTTP API + SQLite) -> web dashboard
 Five people, five workstreams. Owners are TBD: write your name next to a task before starting.
 
 ### W1. Hardware and power (Owner: TBD)
-- [ ] Wire ESP32 + BNO085 + BME280 on a breadboard; confirm both I2C devices are detected.
-- [ ] Wire the GY-NEO6MV2 to ESP32 UART2: GPS TX -> GPIO16, GPS RX -> GPIO17, VCC to 3V3, GND to GND. Confirm NMEA sentences at 9600 baud on serial. Test a fix outdoors with sky view (allow several minutes on the first fix; the board's LED blinks on fix).
-- [ ] Power the ESP32 from the NULLLAB module's 5 V header pin to VIN (or its USB-A to the ESP32's micro-USB). Never the raw battery pin into VIN, and never laptop USB and the module together. Keep a power bank as a fallback.
-- [ ] Solder or secure final connections; heat-shrink; add a switch.
+- [x] Wire ESP32 + BNO085 + BME280 on a breadboard; confirm both I2C devices are detected. *2026-11-07: BNO085 at 0x4B (SDA 21, SCL 17), BME280 on its own bus (SDA 25, SCL 26, power from GPIO27); pins in `firmware/config.h`.*
+- [ ] ~~Wire the GY-NEO6MV2 to ESP32 UART2 and test a fix outdoors.~~ **Dropped for the demo (Elijah, 2026-11-07):** the demo is indoors, location comes from BLE beacons. The GPS currently sends 0 characters (wiring not checked). Firmware still reads it if it is wired later.
+- [x] Power the ESP32 from the NULLLAB module's 5 V header pin to VIN (or its USB-A to the ESP32's micro-USB). Never the raw battery pin into VIN, and never laptop USB and the module together. Keep a power bank as a fallback. *Runs on the module's 5 V, 2026-11-07.*
+- [ ] Solder or secure final connections; heat-shrink; add a switch. **Needed:** loose breadboard wires already froze the IMU once and gave a 182 °C BME280 reading.
 - [ ] Housing (a teammate is designing it; share the dimensions in `CLAUDE.md`): design and 3D-print the housing and a clip for the hat (no drilling): separate LiPo compartment, vent for the BME280, GPS antenna facing up, USB/charge port access, space for LEDs later. Print in PETG or ABS and test-fit before the final print.
 - [ ] Add a worn/not-worn sensor (IR proximity or microswitch) if time allows. If it is cut, set `HAS_WORN_SENSOR 0` in `firmware/config.h`.
-- [ ] Measure battery runtime with Wi-Fi and GPS on (needed for A1: 10+ minutes). Record the result in section 8.
-- [ ] Wiring notes in `docs/WIRING.md`.
+- [ ] Measure battery runtime with Wi-Fi and BLE beacon scanning on (needed for A1: 10+ minutes). Record the result in section 8.
+- [ ] Wiring notes in `docs/WIRING.md` (not written yet; the pins are in `firmware/config.h`).
 
 ### W2. Firmware (Owner: TBD)
 - [x] **F0. Scaffold (code only).** *Claude (for Elijah), 2026-11-07.* Done: `firmware/` Arduino sketch with code for every task below. Compiles for the ESP32 (esp32 core 3.3.12, 81% of flash). 28 laptop tests of the fall logic, heat index, JSON and retry queue pass (`firmware/test/run_tests.sh`). The real server accepts its JSON, and a retried fall returns the same incident. **Nothing has run on hardware yet**, so the tasks below stay open until each is checked on the helmet. Setup and first power-up checklist: `firmware/README.md`.
-- [ ] Read BNO085 (accel, orientation) and BME280 over I2C; print to serial.
-- [ ] Read the GPS with TinyGPSPlus; report `gps_fix`, and `lat`/`lon` only when there is a fix.
-- [ ] Compute heat index from temperature and humidity. Use the same NOAA formula as `heat_index_c()` in `server/simulator.py` (tested against the NWS chart), so the helmet and simulator agree.
-- [ ] Fall state machine with thresholds in `firmware/config.h`. Add a `HAS_WORN_SENSOR` flag; when it is 0, send `worn: true`.
-- [ ] Send `zone: null` in telemetry and events (the server fills in the zone).
-- [ ] Wi-Fi client: POST telemetry (1 Hz) and fall events immediately.
-- [ ] Reconnect logic; fall events queued if Wi-Fi drops. Each retry sends `sent_uptime_ms` (see `docs/PROTOCOL.md` 2.2).
-- [ ] Optional (team decision): BLE zone beacons. Code written 2026-11-07 (D8), off by default. To try: flash `firmware/beacon/beacon.ino` on one spare ESP32 per zone, set `HAS_BLE_BEACONS 1`, pick the Huge APP partition scheme, walk between zones and watch `# beacon zone:` on serial. Record how reliable the zones are in section 8.
+- [x] Read BNO085 (accel, orientation) and BME280 over I2C; print to serial. *On hardware 2026-11-07; IMU about 255 samples/s, with a stall watchdog and retry.*
+- [ ] ~~Read the GPS with TinyGPSPlus.~~ Code is in place, but GPS is dropped for the demo (see W1).
+- [x] Compute heat index from temperature and humidity (same NOAA formula as the simulator). *Sent in telemetry; not shown on the dashboard while heat is off (D13).*
+- [x] Fall state machine with thresholds in `firmware/config.h`. `HAS_WORN_SENSOR 0` sends `worn: true`. *Detects padded drops on hardware (#10-#17); thresholds unchanged.*
+- [x] Send the zone in telemetry and events: `null` without beacons, the beacon zone with `HAS_BLE_BEACONS 1`.
+- [x] Wi-Fi client: POST telemetry (1 Hz) and fall events immediately. *Tested on the iPhone hotspot, 2026-11-07.*
+- [ ] Reconnect logic; fall events queued if Wi-Fi drops. Each retry sends `sent_uptime_ms` (see `docs/PROTOCOL.md` 2.2). *Code and laptop tests done; not yet tested on hardware by dropping Wi-Fi during a fall.*
+- [x] BLE zone beacons (team decision: used for the demo). *One beacon (`WW-1520-S`) tested 2026-11-07: zone detected, fall #17 recorded in 1520-S. Helmet now needs the Huge APP partition scheme. Next: one beacon per demo zone.*
 
 ### W3. Data and testing (Owner: TBD)
 - [ ] CSV logging mode (firmware or serial capture) at 100 Hz or better; store in `data/`. *Firmware side written: `LOG_CSV 1` in `firmware/config.h` prints about 200 lines/s at 921600 baud (see `firmware/README.md`); the actual rate is not yet measured on hardware.*
-- [ ] Safe test protocol: padded drops, sandbag, mattress. No people falling.
+- [x] Safe test protocol: padded drops, sandbag, mattress. No people falling. *Padded drops from about 1 m onto a towel trigger; drops onto a pillow or with the cable pulling do not (free fall under 100 ms, hit under 2.5 g).*
 - [ ] Collect normal-activity data (see A3) and fake-fall data.
 - [ ] Tune thresholds with the firmware owner; write results in section 8.
 - [ ] Run the acceptance tests and record results.
@@ -230,6 +230,7 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 | 2026-11-07 | **Wi-Fi works end to end** (iPhone hotspot, 2.4 GHz): helmet at 172.20.10.6, laptop 172.20.10.3, telemetry about 1/s and a padded test drop (#13, 11.2 g) shown as an alert on the dashboard, not delayed. Server in WSL reached through a Windows portproxy (0.0.0.0:8000 to the WSL IP) and a firewall rule "WorkWear 8000" limited to the local subnet; redo the portproxy if the WSL IP changes after a reboot. iPhone hotspot names use a curly apostrophe (’), which `WIFI_SSID` must match exactly | Claude |
 | 2026-11-07 | **Battery run works**: helmet on the NULLLAB module's 5 V, falls #14-#16 (11.8-13.9 g) arrived over Wi-Fi; dismissed as test drops. After a drop on battery the BME280 read 182 C / -147 hPa (likely a loose wire): firmware now rejects readings outside -40..85 C / 300..1100 hPa, power-cycles it (GPIO27) and retries every 5 s. The drop check (`DROP_DEBUG 1`) now reports the longest free-fall run in 1.5 s and is sent as optional `drop_check` telemetry; the worker profile shows "Last drop check". Dashboard shows air temperature in °F (helmet, server and protocol stay in °C). GPS still sends 0 characters (wiring not checked yet) | Claude |
 | 2026-11-07 | **BLE zone beacon works** (Elijah): one spare ESP32 running `firmware/beacon/beacon.ino` as `WW-1520-S`; helmet with `HAS_BLE_BEACONS 1` reports zone 1520-S (`zone_source` beacon) and a padded drop (#17, 13.9 g) was recorded in 1520-S on battery over Wi-Fi. Telemetry stayed about 1/s and the IMU at 255 samples/s with scanning on. Helmet must now be built with the **Huge APP** partition scheme (`--fqbn esp32:esp32:esp32:PartitionScheme=huge_app`). Accuracy is per zone (Bluetooth signal strength), not an exact spot | Claude |
+| 2026-11-07 | **GPS dropped for the demo (Elijah).** The demo is indoors; location comes from BLE zone beacons (falls back to the dashboard zone). GPS code stays; the module currently sends no data (wiring unchecked). PLAN.md tidied: finished hardware and firmware tasks ticked, A4 reworded to air temperature (heat colors are off), A5 ticked | Claude |
 | | Battery runtime with Wi-Fi + GPS on: TBD (measure) | |
 | | Threshold values after tuning: TBD | |
 
@@ -244,7 +245,8 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 | Wi-Fi blocks device-to-device traffic | Use a phone hotspot or travel router |
 | False fall alarms (helmet dropped, taken off, nodding) | Worn sensor, orientation and stillness checks, threshold tuning, trial log |
 | False alarms create fake hazard zones | A supervisor confirms incidents; only confirmed ones count toward the hazard map |
-| GPS does not work indoors | GPS module is mounted and reports `gps_fix`; the indoor demo uses zone-based or simulated location, labeled as simulated; test a real fix outdoors |
+| GPS does not work indoors | GPS dropped for the demo; BLE zone beacons give the zone, and the dashboard zone (labeled simulated) is the fallback if no beacon is heard |
+| BLE scanning slows Wi-Fi (shared radio) | Tested with one beacon: telemetry still about 1/s and the IMU at 255 samples/s; recheck with all demo beacons on |
 | Heat claim is overstated | Call it heat exposure; do not claim core temperature or heat stress |
 | LiPo safety on a head-mounted device | Module has built-in protection; keep it padded inside the enclosure, charge only via its USB-C, supervised charging, retire if swollen |
 | Server runs in WSL2, which the ESP32 cannot reach by default | Run the server on Windows Python, or forward port 8000 from Windows to WSL2 and allow it in the Windows firewall; test with a phone browser on the hotspot first |
@@ -257,15 +259,16 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 - Hackathon dates, judging format, and demo room setup (indoor, Wi-Fi, power outlets)?
 - Who owns each workstream?
 - Which 3D printer and filament for the housing?
-- Which helmet will we use, and is there room for the housing and clip? Measure the actual battery runtime with Wi-Fi and GPS on, since no figure is guaranteed.
+- Which helmet will we use, and is there room for the housing and clip? Measure the actual battery runtime with Wi-Fi and beacon scanning on, since no figure is guaranteed.
+- How many beacons (spare ESP32s) for the demo, and which zones? At least two, so the zone visibly changes.
 - What does "navigation lights" need to do, if we get to it? (Direction to a fallen worker needs position and heading, which are hard indoors.)
 
 ## 11. Demo script **[proposed]**
 
-1. Show the helmet and dashboard with a named worker online and a live heat reading.
-2. Warm the sensor area slightly; the heat color changes.
-3. Perform a padded drop of the helmet; a fall incident appears on the dashboard with its zone.
+1. Show the helmet and dashboard with a named worker online, their air temperature (°F), and their zone found by a beacon.
+2. Warm the sensor area slightly; the worker's air temperature rises. Say it is air temperature at the helmet, not body temperature.
+3. Perform a padded drop of the helmet near a beacon; a fall incident appears on the dashboard in that beacon's zone.
 4. Pick the helmet up and put it down gently; no false alarm.
 5. Show the incident list and stored data after a refresh.
 6. (Stretch) Confirm the fall incident; its zone turns red on the hazard map. Say plainly which history is sample data.
-7. State what is real (falls, ambient heat, dashboard) and what is future (heart rate, navigation lights, Pi gateway; GPS is mounted but only gets a fix outdoors).
+7. State what is real (falls, air temperature, zone from beacons, dashboard) and what is future (heart rate, navigation lights, Pi gateway, outdoor GPS). Location is per zone, not an exact spot.

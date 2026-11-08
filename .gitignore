@@ -6,6 +6,7 @@ __pycache__/
 
 # Firmware Wi-Fi password (copy firmware/secrets.example.h)
 firmware/secrets.h
+.build/
 
 # Server database (created on startup)
 *.db

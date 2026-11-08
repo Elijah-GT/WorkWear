@@ -11,7 +11,7 @@
 #define DEVICE_ID "helmet-01"
 // The laptop running the server, as the ESP32 sees it on the hotspot. Find it with
 // `ipconfig` on the laptop. Port 8000 (docs/PROTOCOL.md section 1).
-#define SERVER_URL "http://192.168.43.10:8000"
+#define SERVER_URL "http://192.168.137.1:8000"
 
 #define HTTP_TIMEOUT_MS      3000   // no answer within 3 s = failure (PROTOCOL.md section 1)
 #define TELEMETRY_PERIOD_MS  1000   // about 1 Hz
@@ -86,7 +86,7 @@
 // on the dashboard. 0 = no scanning; the helmet sends "zone": null as before.
 // With 1, pick Tools > Partition Scheme > "Huge APP" (BLE makes the program too big for the
 // default scheme). See firmware/README.md.
-#define HAS_BLE_BEACONS      0
+#define HAS_BLE_BEACONS      1
 #define BEACON_NAME_PREFIX   "WW-"   // beacons advertise "WW-<zone id>", e.g. "WW-1520-N"
 #define BEACON_SCAN_S        1       // each scan listens this many seconds
 #define BEACON_MIN_RSSI      -90     // dBm; weaker beacons are ignored

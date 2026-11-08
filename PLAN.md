@@ -260,3 +260,17 @@ Cut order if time runs short: hazard map, worn sensor, heat color polish, map po
 5. Show the incident list and stored data after a refresh.
 6. (Stretch) Confirm the fall incident; its zone turns red on the hazard map. Say plainly which history is sample data.
 7. State what is real (falls, ambient heat, dashboard) and what is future (heart rate, navigation lights, Pi gateway; GPS is mounted but only gets a fix outdoors).
+
+## BLE configuration and hardware check — 2026-11-07
+- User requested BLE zone-beacon location. Enabled HAS_BLE_BEACONS in firmware/config.h. Built with esp32:esp32:esp32:PartitionScheme=huge_app (ESP32 core 3.3.12): 1,809,051 bytes flash (57%), 70,460 bytes globals (21%). Uploaded to CP210x COM8; flash hashes verified.
+- Reset and serial check confirmed: BNO085 IMU OK, BME280 OK, and BLE beacons scanning for WW-<zone>. Stable ~1 g acceleration and ~22 C / 48% RH. Zone remains unknown: beacon acquisition and zone switching are not yet verified with a powered beacon. GPS is intentionally disconnected.
+- Wi-Fi remains not configured (placeholder not-set-yet); dashboard delivery was not tested. Installed missing TinyGPSPlus 1.0.3 to build the existing firmware. Local secrets.h uses placeholder Wi-Fi; build artifacts are ignored under .build/.
+
+## Helmet Wi-Fi connection — 2026-11-07
+- Enabled the Windows laptop mobile hotspot on 2.4 GHz (eduroam itself uses enterprise authentication). Copied hotspot credentials directly into git-ignored firmware/secrets.h, without printing the password. SERVER_URL is now http://192.168.137.1:8000, the laptop hotspot address.
+- Built and flashed COM8 with BLE enabled and Huge APP; flash verified. Found a real BLE heap-allocation crash while scanning nearby devices after Wi-Fi joined. Replaced retained scan results with duplicate callbacks and a bounded queue of valid zone-beacon readings; tracker runs on its own scan task.
+- Hardware check after the fix: Wi-Fi up, helmet-01 online in GET /api/devices with advancing uptime and live IMU/BME280 readings. Two HTTP -11 telemetry timeouts occurred, followed by successful delivery; no reset seen during capture. No beacon is selected and GPS is intentionally disconnected. Actual padded-drop fall delivery remains to be tested; no incident was injected.
+
+## User-reported fall test — 2026-11-07
+- User reports that the physical fall test passed and calibration is satisfactory. Threshold values were not changed in this session. Trial count, measured alert latency, and false-alarm rate were not provided; the broader acceptance criteria remain unverified.
+- Pre-publication server regression check: 168 pytest tests passed. ESP32 BLE/Wi-Fi build passed, flash verified, and live telemetry delivery confirmed; occasional HTTP -11 timeouts recovered.
